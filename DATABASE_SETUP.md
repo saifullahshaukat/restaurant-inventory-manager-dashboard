@@ -7,13 +7,16 @@
 **Windows:**
 - Download: https://www.postgresql.org/download/windows/
 - Choose PostgreSQL 15 or 16
-- Run installer and remember the `postgres` password
+- Run installer and remember the `postgres` password (superuser)
 - Default port: `5432`
+- When asked, let it create default objects
 
 **Or use package manager:**
 ```powershell
+# Using Chocolatey
 choco install postgresql
-# or
+
+# Or using Windows Package Manager
 winget install PostgreSQL.PostgreSQL
 ```
 
@@ -24,19 +27,35 @@ psql --version
 # Should show: psql (PostgreSQL) 15.x or 16.x
 ```
 
+If you get "command not found", PostgreSQL is not in your PATH. Either reinstall (with PATH option checked) or add it manually.
+
 ### Step 3: Create Database & User
+
+Open PowerShell and connect to PostgreSQL as superuser:
 
 ```powershell
 psql -U postgres
 ```
 
-Then run these SQL commands:
+You'll be prompted for the postgres password. Then run these SQL commands:
 
 ```sql
+-- Create the database
 CREATE DATABASE restaurant_inventory_manager;
+
+-- Create the user (important: for security)
 CREATE USER rim_user WITH PASSWORD 'your_secure_password_here';
+
+-- Give user permission to create databases (optional)
 ALTER ROLE rim_user CREATEDB;
+
+-- Give user full privileges on the database
 GRANT ALL PRIVILEGES ON DATABASE restaurant_inventory_manager TO rim_user;
+
+-- IMPORTANT: Give user privileges on the public schema (prevents "permission denied" error!)
+GRANT ALL PRIVILEGES ON SCHEMA public TO rim_user;
+
+-- Exit psql
 \q
 ```
 
@@ -47,72 +66,717 @@ cd d:\Projects\kitchen-command-center-main
 psql -U rim_user -d restaurant_inventory_manager -f schema.sql
 ```
 
+When prompted, enter the password you set for `rim_user`.
+
+**Expected Output:**
+```
+CREATE EXTENSION
+CREATE EXTENSION
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+... (many more CREATE statements)
+CREATE FUNCTION
+CREATE TRIGGER
+INSERT 0 1
+INSERT 0 3
+INSERT 0 3
+... (seed data)
+REVOKE
+```
+
 ### Step 5: Verify Setup
 
 ```powershell
 psql -U rim_user -d restaurant_inventory_manager
+```
 
-# List tables
+Then run these verification commands:
+
+```sql
+-- List all tables (should show 15)
 \dt
 
-# Should show 15 tables (users, businesses, orders, etc.)
+-- Check seed data exists
+SELECT COUNT(*) as business_count FROM businesses;         -- Should show: 1
+SELECT COUNT(*) as supplier_count FROM suppliers;          -- Should show: 3
+SELECT COUNT(*) as menu_count FROM menu_items;             -- Should show: 3
+SELECT COUNT(*) as inventory_count FROM inventory_items;   -- Should show: 3
 
-# Check seed data
-SELECT COUNT(*) FROM businesses;  -- Should show 1
+-- View sample data
+SELECT name, tagline, city FROM businesses;
 
+-- Check if triggers are created
+\dy
+
+-- Exit
 \q
 ```
 
 ### Step 6: Create .env File
 
-Create `.env` in project root:
+Create a file called `.env` in the project root directory:
 
 ```env
+# Database Connection (UPDATE PASSWORD)
 DATABASE_URL=postgresql://rim_user:your_secure_password_here@localhost:5432/restaurant_inventory_manager
+
+# Server Configuration
 NODE_ENV=development
 PORT=5000
-JWT_SECRET=your_super_secret_key_here
+
+# JWT Secret (change this in production!)
+JWT_SECRET=your_super_secret_key_here_change_in_production
+
+# CORS Configuration
 CORS_ORIGIN=http://localhost:8080
+
+# Database Details (for reference)
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=rim_user
+DB_PASSWORD=your_secure_password_here
+DB_NAME=restaurant_inventory_manager
 ```
 
-### Step 7: Common Issues
+**⚠️ IMPORTANT:** Replace `your_secure_password_here` with the actual password you created for `rim_user`!
 
-**Error: "psql: command not found"**
-- PostgreSQL not in PATH. Reinstall or add to PATH
+### Step 7: Secure .env File
 
-**Error: "role 'rim_user' does not exist"**
+The `.env` file is already in `.gitignore`. **Never commit it to GitHub**. Verify:
+
 ```powershell
-psql -U postgres
-CREATE USER rim_user WITH PASSWORD 'password';
-GRANT ALL PRIVILEGES ON DATABASE restaurant_inventory_manager TO rim_user;
+cat .gitignore | Select-String ".env"
+# Should show: .env, .env.local, .env.*.local
+```
+
+---
+
+## Troubleshooting Guide
+
+This section covers issues we encountered during testing and their solutions.
+
+### ❌ Error: "permission denied for schema public"
+
+**What it looks like:**
+```
+ERROR:  permission denied for schema public
+```
+
+**Why it happens:**
+The `rim_user` account doesn't have permissions to create tables in the public schema. This is the most common issue when first setting up the database.
+
+**Solution (Method 1 - Quick Fix):**
+```powershell
+# Run as postgres superuser
+psql -U postgres -d restaurant_inventory_manager -c "GRANT ALL PRIVILEGES ON SCHEMA public TO rim_user;"
+```
+
+**Solution (Method 2 - Complete Fresh Start):**
+If Method 1 doesn't work, drop the schema and recreate it:
+
+```powershell
+# Run as postgres superuser
+psql -U postgres -d restaurant_inventory_manager
+```
+
+Then in psql:
+```sql
+-- Drop and recreate schema (removes all data!)
+DROP SCHEMA public CASCADE;
+CREATE SCHEMA public;
+
+-- Restore permissions
+GRANT ALL PRIVILEGES ON SCHEMA public TO rim_user;
 \q
 ```
 
-**PostgreSQL service not running**
+Then re-run the schema:
 ```powershell
+psql -U rim_user -d restaurant_inventory_manager -f schema.sql
+```
+
+**What this fixes:**
+- Clears any permission conflicts
+- Removes stray PostgreSQL extensions that might be blocking
+- Ensures clean schema creation
+
+### ❌ Error: "role 'rim_user' does not exist"
+
+**What it looks like:**
+```
+FATAL:  role "rim_user" does not exist
+```
+
+**Why it happens:**
+The user `rim_user` was never created in the database.
+
+**Solution:**
+```powershell
+# Connect as postgres superuser
+psql -U postgres -d restaurant_inventory_manager
+```
+
+Then:
+```sql
+-- Create the user
+CREATE USER rim_user WITH PASSWORD 'your_password';
+
+-- Give database access
+GRANT ALL PRIVILEGES ON DATABASE restaurant_inventory_manager TO rim_user;
+
+-- Give schema access
+GRANT ALL PRIVILEGES ON SCHEMA public TO rim_user;
+
+\q
+```
+
+Then try connecting:
+```powershell
+psql -U rim_user -d restaurant_inventory_manager
+```
+
+### ❌ Error: "database does not exist"
+
+**What it looks like:**
+```
+FATAL:  database "restaurant_inventory_manager" does not exist
+```
+
+**Why it happens:**
+The database wasn't created before running the schema.
+
+**Solution:**
+```powershell
+# Connect to default postgres database
+psql -U postgres -d postgres
+```
+
+Then:
+```sql
+-- Create database
+CREATE DATABASE restaurant_inventory_manager;
+
+-- Grant access
+GRANT ALL PRIVILEGES ON DATABASE restaurant_inventory_manager TO rim_user;
+
+-- Connect to new database
+\c restaurant_inventory_manager
+
+-- Grant schema access
+GRANT ALL PRIVILEGES ON SCHEMA public TO rim_user;
+
+\q
+```
+
+Then run schema:
+```powershell
+psql -U rim_user -d restaurant_inventory_manager -f schema.sql
+```
+
+### ❌ Error: "psql: command not found"
+
+**What it looks like:**
+```
+psql: The term 'psql' is not recognized as the name of a cmdlet, function, script file, or operable program.
+```
+
+**Why it happens:**
+PostgreSQL `bin` directory is not in your system PATH.
+
+**Solution (Option 1 - Reinstall):**
+1. Uninstall PostgreSQL
+2. Reinstall and **check the box** that says "Add PostgreSQL to PATH"
+3. Restart PowerShell
+
+**Solution (Option 2 - Manual PATH):**
+1. Find your PostgreSQL installation folder (usually `C:\Program Files\PostgreSQL\15\bin`)
+2. Right-click Start → System → Advanced system settings
+3. Click "Environment Variables"
+4. Edit "Path" and add the PostgreSQL bin folder
+5. Restart PowerShell
+
+**Quick test:**
+```powershell
+psql --version
+```
+
+### ❌ Error: "tables not created but no error shown"
+
+**What it looks like:**
+Schema ran successfully (no error), but when you check with `\dt`, no tables appear.
+
+**Why it happens:**
+This usually means:
+- The schema executed but failed silently
+- You're connected to the wrong database
+- Permissions weren't properly set
+
+**How to diagnose:**
+```powershell
+# Connect to database
+psql -U rim_user -d restaurant_inventory_manager
+
+# Check for tables
+\dt
+
+# If empty, check schema status
+\dn+
+
+# If no "public" schema, check error log
+SELECT * FROM pg_stat_statements LIMIT 10;
+
+\q
+```
+
+**Solution:**
+1. First, grant permissions:
+```powershell
+psql -U postgres -d restaurant_inventory_manager -c "GRANT ALL PRIVILEGES ON SCHEMA public TO rim_user;"
+```
+
+2. Then check if tables exist:
+```powershell
+psql -U rim_user -d restaurant_inventory_manager -c "\dt"
+```
+
+3. If still empty, drop schema and recreate (see above solution)
+
+4. Finally, run schema again with verbose output:
+```powershell
+psql -U rim_user -d restaurant_inventory_manager -f schema.sql -v
+```
+
+### ❌ Error: "password authentication failed for user"
+
+**What it looks like:**
+```
+FATAL:  password authentication failed for user "rim_user"
+```
+
+**Why it happens:**
+Wrong password entered, or `.env` file has incorrect password.
+
+**Solution:**
+```powershell
+# Check your password is correct
+# Option 1: Reset password
+
+psql -U postgres -d restaurant_inventory_manager
+```
+
+Then:
+```sql
+-- Reset user password
+ALTER USER rim_user WITH PASSWORD 'new_password';
+\q
+```
+
+Then update `.env` file with new password.
+
+### ❌ Error: "PostgreSQL service not running"
+
+**What it looks like:**
+```
+psql: could not translate host name "localhost" to address
+psql: error: could not connect to server
+```
+
+**Why it happens:**
+PostgreSQL server isn't running.
+
+**Solution (Windows Services):**
+```powershell
+# Check if service is running
+Get-Service postgresql*
+
+# If not running, start it
 Start-Service postgresql-x64-15
-# Or use Services app: Win+R → services.msc
+# or your version (postgresql-x64-16, etc.)
 ```
 
-### Useful Commands
+**Or manually:**
+1. Press `Win+R`
+2. Type `services.msc`
+3. Find "postgresql-x64-15" (or your version)
+4. Right-click → Start
+
+**To see if it works:**
+```powershell
+psql -U postgres
+```
+
+If you get the password prompt, it's working!
+
+### ❌ Error: "could not open file schema.sql"
+
+**What it looks like:**
+```
+could not open file "schema.sql"
+```
+
+**Why it happens:**
+You're in the wrong directory. The `schema.sql` file needs to be in the current directory.
+
+**Solution:**
+```powershell
+# Navigate to project root
+cd d:\Projects\kitchen-command-center-main
+
+# Verify schema.sql exists
+dir schema.sql
+
+# Now run it
+psql -U rim_user -d restaurant_inventory_manager -f schema.sql
+```
+
+### ❌ Error: "ERROR: duplicate key value violates unique constraint"
+
+**What it looks like:**
+```
+ERROR:  duplicate key value violates unique constraint
+```
+
+**Why it happens:**
+You ran `schema.sql` twice, and seed data is being inserted again.
+
+**Solution:**
+Either:
+
+1. **Option 1 - Skip seed data**: Edit `schema.sql` and comment out the INSERT statements
+2. **Option 2 - Delete and recreate**:
+```powershell
+psql -U postgres -d postgres
+```
+
+Then:
+```sql
+DROP DATABASE restaurant_inventory_manager;
+CREATE DATABASE restaurant_inventory_manager;
+GRANT ALL PRIVILEGES ON DATABASE restaurant_inventory_manager TO rim_user;
+\c restaurant_inventory_manager
+GRANT ALL PRIVILEGES ON SCHEMA public TO rim_user;
+\q
+```
+
+Then run schema fresh:
+```powershell
+psql -U rim_user -d restaurant_inventory_manager -f schema.sql
+```
+
+### ✅ How to Verify Everything Works
 
 ```powershell
-# Backup
-pg_dump -U rim_user restaurant_inventory_manager > backup.sql
-
-# Restore
-psql -U rim_user restaurant_inventory_manager < backup.sql
-
-# Delete database (careful!)
-psql -U postgres -c "DROP DATABASE restaurant_inventory_manager;"
+# Test 1: Connect successfully
+psql -U rim_user -d restaurant_inventory_manager
 ```
 
-### GUI Tools (Optional)
+```sql
+-- Test 2: Check all 15 tables exist
+SELECT COUNT(*) FROM information_schema.tables 
+WHERE table_schema = 'public';
+-- Should return: 15
 
-View data visually with:
-- **pgAdmin**: https://www.pgadmin.org/download/
-- **DBeaver**: https://dbeaver.io/download/
-- **VS Code Extension**: PostgreSQL by Chris Kolkman
+-- Test 3: Check seed data
+SELECT COUNT(*) FROM suppliers;         -- Should be: 3
+SELECT COUNT(*) FROM menu_items;        -- Should be: 3  
+SELECT COUNT(*) FROM inventory_items;   -- Should be: 3
+SELECT COUNT(*) FROM businesses;        -- Should be: 1
+
+-- Test 4: View seed business
+SELECT name, tagline, city FROM businesses;
+-- Should show: Mommy's Kitchen | Artisan Catering & Gourmet Home Dining | Karachi
+
+-- Test 5: Check triggers exist
+\dy
+-- Should show: calculate_margin_percent, update_order_balance, update_purchase_final_amount
+
+\q
+```
+
+If all tests pass, your database is properly set up! 🎉
+
+---
+
+## Advanced Commands for Troubleshooting
+
+### View PostgreSQL Logs
+```powershell
+# Find log file location
+psql -U postgres -c "SHOW log_directory;"
+
+# View recent errors
+Get-Content "C:\Program Files\PostgreSQL\15\data\log\*" -Tail 50
+```
+
+### Check User Permissions
+```powershell
+psql -U postgres -d restaurant_inventory_manager
+```
+
+Then:
+```sql
+-- See all users and their permissions
+\du
+
+-- See schema permissions
+\dn+
+
+-- See table permissions
+\dp
+```
+
+### Reset Database Completely
+```powershell
+# WARNING: This deletes everything!
+psql -U postgres
+
+# In psql:
+DROP DATABASE restaurant_inventory_manager;
+DROP USER rim_user;
+
+# Exit
+\q
+```
+
+Then start over from Step 3.
+
+### Check Database Size
+```powershell
+psql -U rim_user -d restaurant_inventory_manager
+```
+
+Then:
+```sql
+SELECT pg_size_pretty(pg_database_size('restaurant_inventory_manager'));
+```
+
+### Count Active Connections
+```powershell
+psql -U rim_user -d restaurant_inventory_manager -c "SELECT count(*) FROM pg_stat_activity;"
+```
+
+---
+
+## GUI Tools (Optional but Recommended)
+
+### pgAdmin (Web-based)
+Download: https://www.pgadmin.org/download/
+- Most popular PostgreSQL GUI
+- Browser-based
+- Can manage multiple servers
+
+**Setup:**
+1. Install pgAdmin
+2. Create master password
+3. Add server: localhost, port 5432, user rim_user
+4. Browse tables and run queries visually
+
+### DBeaver (Desktop)
+Download: https://dbeaver.io/download/
+- Free community version
+- Excellent ER diagrams
+- Query execution
+- Database diff tools
+
+### VS Code Extension
+- Install "PostgreSQL" by Chris Kolkman
+- Query database directly in VS Code
+- No separate tool needed
+
+---
+
+## Real-World Issue: What We Encountered During Setup
+
+During initial testing, we ran into a real-world permission issue that illustrates why these steps are important:
+
+### The Problem
+```
+ERROR:  permission denied for schema public LINE 1: CREATE TABLE users(
+```
+
+Even though the user `rim_user` was created and granted privileges, it still couldn't create tables.
+
+### Root Cause Analysis
+The issue wasn't just missing database privileges—it was missing **schema privileges**. The `public` schema existed but `rim_user` didn't have permission to create objects in it.
+
+### The Solution
+```powershell
+# This single command fixed it:
+psql -U postgres -d restaurant_inventory_manager -c "GRANT ALL PRIVILEGES ON SCHEMA public TO rim_user;"
+```
+
+### Why This Matters
+1. **PostgreSQL has layered permissions** - You need database privileges AND schema privileges
+2. **Extensions can complicate things** - If extensions like uuid-ossp fail, they can lock the schema
+3. **Silent failures are dangerous** - The schema script might complete but create 0 tables
+
+### Lessons Learned
+- Always verify table creation with `\dt` after running schema
+- Don't rely on exit code 0 alone—check actual output
+- Run diagnostic queries to confirm seed data exists
+- Keep the "Fresh Start" solution in your back pocket
+
+---
+
+## Diagnostic Commands Cheatsheet
+
+### Check Database Structure
+```powershell
+psql -U rim_user -d restaurant_inventory_manager
+```
+
+```sql
+-- See all tables
+\dt
+
+-- See table columns
+\d menu_items
+
+-- See all schemas
+\dn
+
+-- See database size
+SELECT pg_size_pretty(pg_database_size('restaurant_inventory_manager'));
+
+-- See all users
+\du
+
+-- See user privileges
+\dp
+
+-- See triggers
+\dy
+
+-- See indexes
+\di
+```
+
+### Check Seed Data
+```sql
+-- Count each table
+SELECT 'users' as table_name, COUNT(*) FROM users
+UNION ALL SELECT 'businesses', COUNT(*) FROM businesses
+UNION ALL SELECT 'suppliers', COUNT(*) FROM suppliers
+UNION ALL SELECT 'menu_items', COUNT(*) FROM menu_items
+UNION ALL SELECT 'inventory_items', COUNT(*) FROM inventory_items
+UNION ALL SELECT 'clients', COUNT(*) FROM clients
+UNION ALL SELECT 'orders', COUNT(*) FROM orders
+UNION ALL SELECT 'order_items', COUNT(*) FROM order_items
+UNION ALL SELECT 'purchases', COUNT(*) FROM purchases
+UNION ALL SELECT 'purchase_items', COUNT(*) FROM purchase_items
+UNION ALL SELECT 'payments', COUNT(*) FROM payments
+UNION ALL SELECT 'stock_movements', COUNT(*) FROM stock_movements
+UNION ALL SELECT 'notifications', COUNT(*) FROM notifications
+UNION ALL SELECT 'audit_logs', COUNT(*) FROM audit_logs
+UNION ALL SELECT 'menu_item_ingredients', COUNT(*) FROM menu_item_ingredients
+ORDER BY table_name;
+```
+
+### Verify Triggers
+```sql
+-- Check all triggers
+SELECT trigger_name, event_object_table, action_statement 
+FROM information_schema.triggers 
+WHERE trigger_schema = 'public';
+```
+
+### Test Connection String (from .env)
+```powershell
+# Test if your DATABASE_URL works
+$env:DATABASE_URL = "postgresql://rim_user:your_password@localhost:5432/restaurant_inventory_manager"
+psql $env:DATABASE_URL -c "SELECT 'Connected!' as status;"
+```
+
+---
+
+## Performance & Optimization
+
+### View Index Usage
+```sql
+SELECT 
+  schemaname,
+  tablename,
+  indexname,
+  idx_scan as times_used
+FROM pg_stat_user_indexes
+ORDER BY idx_scan DESC;
+```
+
+### Find Slow Queries
+```sql
+-- Enable query logging (run as postgres superuser)
+ALTER SYSTEM SET log_min_duration_statement = 1000; -- Log queries > 1 second
+SELECT pg_reload_conf();
+
+-- Then check logs
+SELECT * FROM pg_stat_statements 
+ORDER BY mean_exec_time DESC 
+LIMIT 10;
+```
+
+### Check Connection Pool Status
+```sql
+SELECT 
+  datname,
+  usename,
+  count(*) as connections,
+  state
+FROM pg_stat_activity
+GROUP BY datname, usename, state;
+```
+
+---
+
+## Maintenance & Backups
+
+### Automated Daily Backup (Windows)
+
+Create a file `backup_db.bat`:
+```batch
+@echo off
+cd D:\Projects\kitchen-command-center-main
+
+REM Get current date
+for /f "tokens=2-4 delims=/ " %%a in ('date /t') do (set mydate=%%c%%a%%b)
+
+REM Backup command
+"C:\Program Files\PostgreSQL\15\bin\pg_dump" -U rim_user -d restaurant_inventory_manager > backups\backup_%mydate%.sql
+
+REM Compress backup
+powershell -NoProfile -Command "Compress-Archive -Force -Path backups\backup_%mydate%.sql -DestinationPath backups\backup_%mydate%.zip"
+
+REM Delete original (optional)
+del backups\backup_%mydate%.sql
+
+echo Backup completed: backup_%mydate%.zip
+```
+
+Then schedule it with Task Scheduler:
+1. Win+R → `taskschd.msc`
+2. Create Basic Task
+3. Set trigger to Daily at 2 AM
+4. Set action to run `backup_db.bat`
+
+### Restore from Backup
+```powershell
+# Stop your application first!
+
+# Drop current database
+psql -U postgres -d postgres -c "DROP DATABASE restaurant_inventory_manager;"
+
+# Recreate empty database
+psql -U postgres -d postgres -c "CREATE DATABASE restaurant_inventory_manager; GRANT ALL ON DATABASE restaurant_inventory_manager TO rim_user;"
+
+# Restore from backup
+psql -U rim_user -d restaurant_inventory_manager < backups/backup_20231220.sql
+
+# Grant schema permissions
+psql -U postgres -d restaurant_inventory_manager -c "GRANT ALL PRIVILEGES ON SCHEMA public TO rim_user;"
+
+# Verify
+psql -U rim_user -d restaurant_inventory_manager -c "\dt"
+```
 
 ---
 
