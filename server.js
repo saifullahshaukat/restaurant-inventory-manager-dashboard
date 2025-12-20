@@ -359,6 +359,31 @@ app.put('/api/inventory/:id/stock', async (req, res) => {
   }
 });
 
+// DELETE inventory item
+app.delete('/api/inventory/:id', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      UPDATE inventory_items 
+      SET is_active = false, updated_at = NOW()
+      WHERE id = $1 AND is_active = true
+      RETURNING *
+    `, [req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Inventory item not found' });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Inventory item deleted successfully',
+      data: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error deleting inventory item:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ============================================================================
 // SUPPLIERS ENDPOINTS
 // ============================================================================
@@ -418,6 +443,31 @@ app.post('/api/suppliers', async (req, res) => {
   }
 });
 
+// DELETE supplier
+app.delete('/api/suppliers/:id', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      UPDATE suppliers 
+      SET is_active = false, updated_at = NOW()
+      WHERE id = $1 AND is_active = true
+      RETURNING *
+    `, [req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Supplier not found' });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Supplier deleted successfully',
+      data: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error deleting supplier:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ============================================================================
 // PURCHASES ENDPOINTS
 // ============================================================================
@@ -427,10 +477,12 @@ app.get('/api/purchases', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT 
-        id, purchase_order_number, supplier_name, purchase_date, 
-        total_amount, payment_status, status, created_at
-      FROM purchases
-      ORDER BY purchase_date DESC
+        p.id, p.purchase_order_number, p.supplier_name, p.purchase_date, 
+        p.total_amount, p.payment_status, p.status, p.created_at,
+        pi.quantity, pi.unit, pi.unit_price, pi.ingredient_name
+      FROM purchases p
+      LEFT JOIN purchase_items pi ON p.id = pi.purchase_id
+      ORDER BY p.purchase_date DESC
     `);
     res.json({ success: true, data: result.rows });
   } catch (error) {
@@ -456,9 +508,8 @@ app.post('/api/purchases', async (req, res) => {
     const itemsArray = items || [];
     const totalAmount = itemsArray.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
 
-    // Generate purchase order number
-    const purchaseNum = await pool.query(`SELECT COUNT(*) as count FROM purchases`);
-    const purchaseOrderNumber = `PO-${String(purchaseNum.rows[0].count + 1).padStart(4, '0')}`;
+    // Generate unique purchase order number using UUID suffix
+    const purchaseOrderNumber = `PO-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
     // Create purchase order
     const purchaseResult = await pool.query(`
@@ -473,12 +524,33 @@ app.post('/api/purchases', async (req, res) => {
     // Add items to purchase
     if (itemsArray && itemsArray.length > 0) {
       for (const item of itemsArray) {
+        // Auto-create inventory item if it doesn't exist
+        let inventoryItemId = null;
+        const existingInventory = await pool.query(`
+          SELECT id FROM inventory_items 
+          WHERE business_id = $1 AND name = $2 AND is_active = true
+        `, [businessId, item.ingredient_name]);
+
+        if (existingInventory.rows.length > 0) {
+          inventoryItemId = existingInventory.rows[0].id;
+        } else {
+          // Create new inventory item
+          const newInventory = await pool.query(`
+            INSERT INTO inventory_items 
+            (business_id, name, unit, cost_per_unit, current_stock, minimum_stock, supplier_id, supplier_name, is_active)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
+            RETURNING id
+          `, [businessId, item.ingredient_name, item.unit, item.unit_price, item.quantity, 0, supplier_id, supplier_name]);
+          inventoryItemId = newInventory.rows[0].id;
+        }
+
+        // Add purchase item
         await pool.query(`
           INSERT INTO purchase_items 
           (purchase_id, inventory_item_id, ingredient_name, quantity, unit, unit_price, total_price)
           VALUES ($1, $2, $3, $4, $5, $6, $7)
         `, [
-          purchaseId, item.inventory_item_id, item.ingredient_name,
+          purchaseId, inventoryItemId, item.ingredient_name,
           item.quantity, item.unit, item.unit_price, item.quantity * item.unit_price
         ]);
 
@@ -487,7 +559,7 @@ app.post('/api/purchases', async (req, res) => {
           UPDATE inventory_items 
           SET current_stock = current_stock + $1, updated_at = NOW()
           WHERE id = $2
-        `, [item.quantity, item.inventory_item_id]);
+        `, [item.quantity, inventoryItemId]);
       }
     }
 
@@ -527,6 +599,30 @@ app.put('/api/purchases/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating purchase:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE purchase
+app.delete('/api/purchases/:id', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      DELETE FROM purchases 
+      WHERE id = $1
+      RETURNING *
+    `, [req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Purchase not found' });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Purchase deleted successfully',
+      data: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error deleting purchase:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -571,9 +667,8 @@ app.post('/api/orders', async (req, res) => {
 
     const totalValue = guest_count * price_per_head;
 
-    // Generate order number
-    const orderNum = await pool.query(`SELECT COUNT(*) as count FROM orders`);
-    const orderNumber = `ORD-${String(orderNum.rows[0].count + 1).padStart(4, '0')}`;
+    // Generate unique order number (timestamp + random)
+    const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
     // Create order
     const orderResult = await pool.query(`
@@ -645,6 +740,30 @@ app.put('/api/orders/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating order:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE order
+app.delete('/api/orders/:id', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      DELETE FROM orders 
+      WHERE id = $1
+      RETURNING *
+    `, [req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Order deleted successfully',
+      data: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error deleting order:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

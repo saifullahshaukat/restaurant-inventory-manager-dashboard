@@ -176,4 +176,30 @@
   .shadow-elevated {
     box-shadow: var(--shadow-elevated);
   }
+
+  /* Custom Scrollbar Styling */
+  .scrollbar-gold::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .scrollbar-gold::-webkit-scrollbar-track {
+    background: hsl(var(--secondary));
+    border-radius: 10px;
+  }
+
+  .scrollbar-gold::-webkit-scrollbar-thumb {
+    background: hsl(var(--gold));
+    border-radius: 10px;
+    transition: background 0.2s;
+  }
+
+  .scrollbar-gold::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--gold-light));
+  }
+
+  /* Firefox scrollbar */
+  .scrollbar-gold {
+    scrollbar-color: hsl(var(--gold)) hsl(var(--secondary));
+    scrollbar-width: thin;
+  }
 }

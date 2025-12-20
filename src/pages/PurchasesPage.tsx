@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { usePurchases, useCreatePurchase, useSuppliers, useCreateSupplier } from '@/hooks/api';
+import { usePurchases, useCreatePurchase, useSuppliers, useCreateSupplier, useDeletePurchase, useDeleteSupplier } from '@/hooks/api';
 import { GroceryPurchase } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,7 +28,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import { Plus, Search, ShoppingCart, Calendar, TrendingDown, Eye, Loader2 } from 'lucide-react';
+import { Plus, Search, ShoppingCart, Calendar, TrendingDown, Eye, Loader2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function PurchasesPage() {
@@ -41,6 +41,8 @@ export default function PurchasesPage() {
     purchase_date: '',
     quantity: '',
     cost: '',
+    ingredient_name: '',
+    unit: 'kg',
   });
   const [supplierFormData, setSupplierFormData] = useState({
     name: '',
@@ -55,17 +57,19 @@ export default function PurchasesPage() {
   const { data: suppliers = [] } = useSuppliers();
   const createPurchase = useCreatePurchase();
   const createSupplier = useCreateSupplier();
+  const deletePurchase = useDeletePurchase();
+  const deleteSupplier = useDeleteSupplier();
 
   const filteredPurchases = purchases.filter(p =>
     (p.supplier_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-    (p.item_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
+    (p.ingredient_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
   );
 
   // Stats
-  const totalSpent = purchases.reduce((acc, p) => acc + (p.quantity * p.cost_per_unit), 0);
+  const totalSpent = purchases.reduce((acc, p) => acc + ((p.quantity || 0) * (p.unit_price || 0)), 0);
   const thisMonthSpent = purchases
     .filter(p => new Date(p.purchase_date).getMonth() === new Date().getMonth())
-    .reduce((acc, p) => acc + (p.quantity * p.cost_per_unit), 0);
+    .reduce((acc, p) => acc + ((p.quantity || 0) * (p.unit_price || 0)), 0);
 
   const handleAddSupplier = async () => {
     if (!supplierFormData.name) {
@@ -95,19 +99,51 @@ export default function PurchasesPage() {
     }
   };
 
+  const handleDeletePurchase = async (purchaseId: string) => {
+    if (confirm('Are you sure you want to delete this purchase?')) {
+      try {
+        await deletePurchase.mutateAsync(purchaseId);
+        toast.success('Purchase deleted successfully!');
+      } catch (error) {
+        toast.error('Failed to delete purchase');
+      }
+    }
+  };
+
+  const handleDeleteSupplier = async (supplierId: string) => {
+    if (confirm('Are you sure you want to delete this supplier?')) {
+      try {
+        await deleteSupplier.mutateAsync(supplierId);
+        toast.success('Supplier deleted successfully!');
+      } catch (error) {
+        toast.error('Failed to delete supplier');
+      }
+    }
+  };
+
   const handleLogPurchase = async () => {
-    if (!formData.supplier_id || !formData.purchase_date || !formData.quantity || !formData.cost) {
+    if (!formData.supplier_id || !formData.purchase_date || !formData.quantity || !formData.cost || !formData.ingredient_name || !formData.unit) {
       toast.error('Please fill in all required fields');
+      return;
+    }
+
+    // Get the selected supplier name
+    const selectedSupplier = suppliers.find(s => s.id === formData.supplier_id);
+    if (!selectedSupplier) {
+      toast.error('Invalid supplier selected');
       return;
     }
 
     try {
       await createPurchase.mutateAsync({
         supplier_id: formData.supplier_id,
+        supplier_name: selectedSupplier.name,
         purchase_date: formData.purchase_date,
         items: [{
           quantity: parseFloat(formData.quantity),
           unit_price: parseFloat(formData.cost),
+          ingredient_name: formData.ingredient_name,
+          unit: formData.unit,
         }],
       });
       toast.success('Purchase logged successfully!');
@@ -118,6 +154,8 @@ export default function PurchasesPage() {
         purchase_date: '',
         quantity: '',
         cost: '',
+        ingredient_name: '',
+        unit: 'kg',
       });
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to log purchase');
@@ -191,13 +229,52 @@ export default function PurchasesPage() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Quantity *</label>
+              <label className="text-sm font-medium">Item/Ingredient Name *</label>
               <Input
-                type="number"
-                placeholder="e.g., 10"
-                value={formData.quantity}
-                onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                type="text"
+                placeholder="e.g., Chicken, Rice, Oil"
+                value={formData.ingredient_name}
+                onChange={(e) => setFormData({ ...formData, ingredient_name: e.target.value })}
               />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Quantity & Unit *</label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  placeholder="e.g., 10"
+                  value={formData.quantity}
+                  onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                  className="flex-1"
+                />
+                <Select value={formData.unit} onValueChange={(value) => setFormData({ ...formData, unit: value })}>
+                  <SelectTrigger className="w-24">
+                    <SelectValue placeholder="Unit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="kg">kg</SelectItem>
+                    <SelectItem value="g">g</SelectItem>
+                    <SelectItem value="ton">ton</SelectItem>
+                    <SelectItem value="lbs">lbs</SelectItem>
+                    <SelectItem value="oz">oz</SelectItem>
+                    <SelectItem value="L">L</SelectItem>
+                    <SelectItem value="ml">ml</SelectItem>
+                    <SelectItem value="gallon">gallon</SelectItem>
+                    <SelectItem value="cup">cup</SelectItem>
+                    <SelectItem value="tbsp">tbsp</SelectItem>
+                    <SelectItem value="tsp">tsp</SelectItem>
+                    <SelectItem value="pcs">pcs</SelectItem>
+                    <SelectItem value="box">box</SelectItem>
+                    <SelectItem value="bottle">bottle</SelectItem>
+                    <SelectItem value="dozen">dozen</SelectItem>
+                    <SelectItem value="bundle">bundle</SelectItem>
+                    <SelectItem value="can">can</SelectItem>
+                    <SelectItem value="jar">jar</SelectItem>
+                    <SelectItem value="packet">packet</SelectItem>
+                    <SelectItem value="carton">carton</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div>
               <label className="text-sm font-medium">Cost per Unit (Rs) *</label>
@@ -372,25 +449,37 @@ export default function PurchasesPage() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent border-border">
-                <TableHead className="font-display font-semibold">Purchase ID</TableHead>
-                <TableHead className="font-display font-semibold">Date</TableHead>
                 <TableHead className="font-display font-semibold">Supplier</TableHead>
+                <TableHead className="font-display font-semibold">Item</TableHead>
+                <TableHead className="font-display font-semibold">Date</TableHead>
                 <TableHead className="font-display font-semibold">Quantity</TableHead>
-                <TableHead className="font-display font-semibold">Cost per Unit</TableHead>
-                <TableHead className="font-display font-semibold">Total Cost</TableHead>
+                <TableHead className="font-display font-semibold">Unit Price</TableHead>
+                <TableHead className="font-display font-semibold">Total</TableHead>
+                <TableHead className="font-display font-semibold">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredPurchases.map((purchase) => (
-                <TableRow key={purchase.id} className="border-border hover:bg-secondary/50">
-                  <TableCell className="font-mono font-medium">{purchase.id}</TableCell>
+                <TableRow key={`${purchase.id}-${purchase.ingredient_name}`} className="border-border hover:bg-secondary/50">
+                  <TableCell className="text-sm text-muted-foreground">{purchase.supplier_name}</TableCell>
+                  <TableCell className="font-medium">{purchase.ingredient_name || 'N/A'}</TableCell>
                   <TableCell className="text-sm">
                     {new Date(purchase.purchase_date).toLocaleDateString()}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{purchase.supplier_name}</TableCell>
-                  <TableCell className="text-sm">{purchase.quantity}</TableCell>
-                  <TableCell className="font-semibold">Rs {purchase.cost_per_unit}</TableCell>
-                  <TableCell className="font-semibold text-gold">Rs {(purchase.quantity * purchase.cost_per_unit).toLocaleString()}</TableCell>
+                  <TableCell className="text-sm font-medium">{purchase.quantity} {purchase.unit}</TableCell>
+                  <TableCell className="font-semibold">Rs {purchase.unit_price?.toLocaleString()}</TableCell>
+                  <TableCell className="font-semibold text-gold">Rs {((purchase.quantity || 0) * (purchase.unit_price || 0)).toLocaleString()}</TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeletePurchase(purchase.id)}
+                      disabled={deletePurchase.isPending}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -401,6 +490,41 @@ export default function PurchasesPage() {
           </div>
         )}
       </div>
-    </DashboardLayout>
+
+      {/* Suppliers Section */}
+      <div className="card-premium overflow-hidden mt-6">
+        <div className="p-6 border-b border-border">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Suppliers</h3>
+            <Button 
+              size="sm"
+              className="bg-gold hover:bg-gold-light text-primary-foreground"
+              onClick={() => setIsAddSupplierDialogOpen(true)}
+            >
+              <Plus className="w-4 h-4 mr-1" /> Add New
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {suppliers.map((supplier) => (
+              <div key={supplier.id} className="p-4 border border-border rounded-lg flex items-between justify-between">
+                <div>
+                  <p className="font-medium">{supplier.name}</p>
+                  <p className="text-sm text-muted-foreground">{supplier.email}</p>
+                  <p className="text-sm text-muted-foreground">{supplier.phone}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDeleteSupplier(supplier.id)}
+                  disabled={deleteSupplier.isPending}
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>    </DashboardLayout>
   );
 }

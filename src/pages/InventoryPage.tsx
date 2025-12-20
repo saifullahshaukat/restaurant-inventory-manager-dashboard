@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { Plus, Search, Package, AlertTriangle, TrendingUp, Trash2, Loader2 } from 'lucide-react';
-import { useInventory, useLowStockItems, useCreateInventoryItem } from '@/hooks/api';
+import { useInventory, useLowStockItems, useCreateInventoryItem, useDeleteInventoryItem } from '@/hooks/api';
 import { toast } from 'sonner';
 
 export default function InventoryPage() {
@@ -40,6 +40,7 @@ export default function InventoryPage() {
   const { data: inventory = [], isLoading, error, refetch } = useInventory();
   const { data: lowStockItems = [] } = useLowStockItems();
   const createItem = useCreateInventoryItem();
+  const deleteItem = useDeleteInventoryItem();
 
   const filteredItems = inventory.filter(item =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -78,6 +79,17 @@ export default function InventoryPage() {
       });
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to add item');
+    }
+  };
+
+  const handleDeleteItem = async (itemId: string) => {
+    if (confirm('Are you sure you want to delete this item?')) {
+      try {
+        await deleteItem.mutateAsync(itemId);
+        toast.success('Item deleted successfully!');
+      } catch (error) {
+        toast.error('Failed to delete item');
+      }
     }
   };
 
@@ -261,6 +273,7 @@ export default function InventoryPage() {
                 <TableHead className="font-display font-semibold">Supplier</TableHead>
                 <TableHead className="font-display font-semibold">Cost/Unit</TableHead>
                 <TableHead className="font-display font-semibold">Status</TableHead>
+                <TableHead className="font-display font-semibold">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -290,6 +303,17 @@ export default function InventoryPage() {
                           In Stock
                         </Badge>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteItem(item.id)}
+                        disabled={deleteItem.isPending}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 );

@@ -29,7 +29,7 @@ export function OrderCard({ order }: OrderCardProps) {
         <div>
           <p className="text-xs text-muted-foreground font-mono">{order.id}</p>
           <h3 className="font-display text-lg font-semibold text-foreground mt-1">
-            {order.clientName}
+            {order.client_name}
           </h3>
         </div>
         <Badge className={cn("border", statusColors[order.status])}>
@@ -38,33 +38,33 @@ export function OrderCard({ order }: OrderCardProps) {
       </div>
 
       <div className="flex items-center gap-2 mb-4">
-        <span className={cn("text-xs font-medium px-2 py-1 rounded-full", clientTypeColors[order.clientType])}>
-          {order.clientType}
+        <span className={cn("text-xs font-medium px-2 py-1 rounded-full", clientTypeColors[order.client_type])}>
+          {order.client_type}
         </span>
         <span className="text-xs text-muted-foreground">•</span>
-        <span className="text-xs text-muted-foreground">{order.eventType}</span>
+        <span className="text-xs text-muted-foreground">{order.event_type}</span>
       </div>
 
       <div className="grid grid-cols-3 gap-4 text-sm">
         <div className="flex items-center gap-2 text-muted-foreground">
           <Calendar className="w-4 h-4" />
-          <span>{new Date(order.eventDate).toLocaleDateString('en-PK', { day: 'numeric', month: 'short' })}</span>
+          <span>{new Date(order.event_date).toLocaleDateString('en-PK', { day: 'numeric', month: 'short' })}</span>
         </div>
         <div className="flex items-center gap-2 text-muted-foreground">
           <Users className="w-4 h-4" />
-          <span>{order.guestCount} guests</span>
+          <span>{order.guest_count ?? 0} guests</span>
         </div>
         <div className="flex items-center gap-2 text-gold font-semibold">
           <CreditCard className="w-4 h-4" />
-          <span>Rs {(order.totalValue / 1000).toFixed(0)}K</span>
+          <span>Rs {((order.total_value ?? 0) / 1000).toFixed(0)}K</span>
         </div>
       </div>
 
-      {order.remainingBalance > 0 && (
+      {(order.remainingBalance ?? 0) > 0 && (
         <div className="mt-4 pt-3 border-t border-border">
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Balance Due</span>
-            <span className="font-semibold text-warning">Rs {order.remainingBalance.toLocaleString()}</span>
+            <span className="font-semibold text-warning">Rs {(order.remainingBalance ?? 0).toLocaleString()}</span>
           </div>
         </div>
       )}

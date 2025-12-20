@@ -54,6 +54,9 @@ export const inventoryAPI = {
 
   // Update stock
   updateStock: (id, data) => api.put(`/inventory/${id}/stock`, data),
+
+  // Delete inventory item
+  delete: (id) => api.delete(`/inventory/${id}`),
 };
 
 // ============================================================================
@@ -69,6 +72,9 @@ export const purchaseAPI = {
 
   // Update purchase
   update: (id, data) => api.put(`/purchases/${id}`, data),
+
+  // Delete purchase
+  delete: (id) => api.delete(`/purchases/${id}`),
 };
 
 // ============================================================================
@@ -81,6 +87,9 @@ export const orderAPI = {
 
   // Create order
   create: (data) => api.post('/orders', data),
+
+  // Delete order
+  delete: (id) => api.delete(`/orders/${id}`),
 
   // Update order
   update: (id, data) => api.put(`/orders/${id}`, data),
@@ -107,11 +116,16 @@ export const suppliersAPI = {
 
   // Create supplier
   create: (data) => api.post('/suppliers', data),
+
+  // Delete supplier
+  delete: (id) => api.delete(`/suppliers/${id}`),
 };
 
 // ============================================================================
 // USER API
 // ============================================================================
+
+export const userAPI = {
   // Get profile
   getProfile: () => api.get('/profile'),
 

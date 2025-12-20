@@ -127,6 +127,17 @@ export const useUpdateStock = () => {
   });
 };
 
+export const useDeleteInventoryItem = () => {
+  const queryClient = useQueryClient();
+  return useMutation<any, Error, string>({
+    mutationFn: (id) => inventoryAPI.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['lowStockItems'] });
+    },
+  });
+};
+
 // ============================================================================
 // PURCHASE HOOKS
 // ============================================================================
@@ -143,7 +154,7 @@ export const usePurchases = () => {
 
 export const useCreatePurchase = () => {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<any, Error, any>({
     mutationFn: (data) => purchaseAPI.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
@@ -159,6 +170,17 @@ export const useUpdatePurchase = () => {
     mutationFn: ({ id, data }) => purchaseAPI.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
+    },
+  });
+};
+
+export const useDeletePurchase = () => {
+  const queryClient = useQueryClient();
+  return useMutation<any, Error, string>({
+    mutationFn: (id) => purchaseAPI.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['purchases'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
     },
   });
 };
@@ -186,6 +208,16 @@ export const useCreateOrder = () => {
     },
   });
 };
+export const useDeleteOrder = () => {
+  const queryClient = useQueryClient();
+  return useMutation<any, Error, string>({
+    mutationFn: (id) => orderAPI.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+};
+
 
 export const useUpdateOrder = () => {
   const queryClient = useQueryClient();
@@ -272,6 +304,15 @@ export const useCreateSupplier = () => {
   const queryClient = useQueryClient();
   return useMutation<any, Error, any>({
     mutationFn: (data) => suppliersAPI.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+    },
+  });
+};
+export const useDeleteSupplier = () => {
+  const queryClient = useQueryClient();
+  return useMutation<any, Error, string>({
+    mutationFn: (id) => suppliersAPI.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suppliers'] });
     },

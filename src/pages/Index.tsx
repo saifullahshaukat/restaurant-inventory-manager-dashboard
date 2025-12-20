@@ -14,16 +14,17 @@ import {
   Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useDashboardStats, useOrders, useLowStockItems } from '@/hooks/api';
+import { useDashboardStats, useOrders, useLowStockItems, usePurchases } from '@/hooks/api';
 
 const Index = () => {
   // API hooks
   const { data: stats, isLoading: statsLoading, isError: statsError } = useDashboardStats();
   const { data: allOrders = [], isLoading: ordersLoading, isError: ordersError } = useOrders();
+  const { data: allPurchases = [], isLoading: purchasesLoading, isError: purchasesError } = usePurchases();
   const { data: allLowStockItems = [], isLoading: stockLoading, isError: stockError } = useLowStockItems();
 
-  const loading = statsLoading || ordersLoading || stockLoading;
-  const error = statsError || ordersError || stockError;
+  const loading = statsLoading || ordersLoading || purchasesLoading || stockLoading;
+  const error = statsError || ordersError || purchasesError || stockError;
   
   // Get first 5 items
   const orders = allOrders.slice(0, 5);
@@ -111,10 +112,10 @@ const Index = () => {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <div className="lg:col-span-2">
-          <RevenueChart />
+          <RevenueChart orders={allOrders} purchases={allPurchases} />
         </div>
         <div>
-          <BestSellersChart />
+          <BestSellersChart orders={allOrders} />
         </div>
       </div>
 

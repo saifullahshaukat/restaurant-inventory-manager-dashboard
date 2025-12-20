@@ -1,7 +1,50 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { monthlyRevenueData, bestSellingDishes } from '@/data/mockData';
+import { Order } from '@/types';
 
-export function RevenueChart() {
+interface RevenueChartProps {
+  orders: Order[];
+  purchases: any[];
+}
+
+export function RevenueChart({ orders = [], purchases = [] }: RevenueChartProps) {
+  // Calculate monthly revenue from delivered/closed orders
+  const monthlyData = {} as Record<string, { revenue: number; profit: number }>;
+  const currentDate = new Date();
+  
+  // Initialize last 6 months
+  for (let i = 5; i >= 0; i--) {
+    const date = new Date(currentDate);
+    date.setMonth(date.getMonth() - i);
+    const monthKey = date.toLocaleDateString('en-US', { month: 'short' });
+    monthlyData[monthKey] = { revenue: 0, profit: 0 };
+  }
+
+  // Sum delivered orders revenue
+  const deliveredOrders = orders.filter(o => o.status === 'Delivered' || o.status === 'Closed');
+  deliveredOrders.forEach(order => {
+    const orderDate = new Date(order.event_date);
+    const monthKey = orderDate.toLocaleDateString('en-US', { month: 'short' });
+    if (monthKey in monthlyData) {
+      monthlyData[monthKey].revenue += order.total_value ?? 0;
+    }
+  });
+
+  // Calculate profit (revenue - COGS)
+  const totalCOGS = purchases.reduce((acc, p) => acc + ((p.quantity ?? 0) * (p.unit_price ?? 0)), 0);
+  const totalRevenue = deliveredOrders.reduce((acc, o) => acc + (o.total_value ?? 0), 0);
+  const totalProfit = totalRevenue - totalCOGS;
+  const profitPerMonth = totalProfit / 6;
+  
+  Object.keys(monthlyData).forEach(month => {
+    monthlyData[month].profit = profitPerMonth > 0 ? profitPerMonth : 0;
+  });
+
+  const chartData = Object.entries(monthlyData).map(([month, data]) => ({
+    month,
+    revenue: data.revenue,
+    profit: data.profit,
+  }));
+
   return (
     <div className="card-premium p-6">
       <div className="flex items-center justify-between mb-6">
@@ -22,7 +65,7 @@ export function RevenueChart() {
       </div>
       
       <ResponsiveContainer width="100%" height={280}>
-        <BarChart data={monthlyRevenueData} barGap={4}>
+        <BarChart data={chartData} barGap={4}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
           <XAxis 
             dataKey="month" 
@@ -43,7 +86,7 @@ export function RevenueChart() {
               borderRadius: '8px',
               boxShadow: 'var(--shadow-card)',
             }}
-            formatter={(value: number) => [`Rs ${value.toLocaleString()}`, '']}
+            formatter={(value: number) => [`Rs ${(value / 1000).toFixed(0)}K`, '']}
             labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600 }}
           />
           <Bar 
@@ -64,7 +107,30 @@ export function RevenueChart() {
   );
 }
 
-export function BestSellersChart() {
+interface BestSellersChartProps {
+  orders: Order[];
+}
+
+export function BestSellersChart({ orders = [] }: BestSellersChartProps) {
+  // Calculate best selling dishes from order items
+  const dishSales = {} as Record<string, { orders: number; revenue: number }>;
+  
+  orders.forEach(order => {
+    // For now, estimate based on total order value
+    // In a real scenario, you'd have order_items table
+    if (order.total_value) {
+      const estimatedDishName = `Event Order`;
+      dishSales[estimatedDishName] = (dishSales[estimatedDishName] || { orders: 0, revenue: 0 });
+      dishSales[estimatedDishName].orders += 1;
+      dishSales[estimatedDishName].revenue += order.total_value;
+    }
+  });
+
+  const topDishes = Object.entries(dishSales)
+    .map(([name, data]) => ({ name, ...data }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
+
   return (
     <div className="card-premium p-6">
       <div className="mb-6">
@@ -73,28 +139,32 @@ export function BestSellersChart() {
       </div>
       
       <div className="space-y-4">
-        {bestSellingDishes.map((dish, index) => (
-          <div key={dish.name} className="flex items-center gap-4">
-            <span className="w-6 h-6 rounded-full bg-gold/10 text-gold text-xs font-bold flex items-center justify-center">
-              {index + 1}
-            </span>
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-medium text-sm text-foreground">{dish.name}</span>
-                <span className="text-xs text-muted-foreground">{dish.orders} orders</span>
+        {topDishes.length > 0 ? (
+          topDishes.map((dish, index) => (
+            <div key={dish.name} className="flex items-center gap-4">
+              <span className="w-6 h-6 rounded-full bg-gold/10 text-gold text-xs font-bold flex items-center justify-center">
+                {index + 1}
+              </span>
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-medium text-sm text-foreground">{dish.name}</span>
+                  <span className="text-xs text-muted-foreground">{dish.orders} orders</span>
+                </div>
+                <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-gold to-gold-light rounded-full transition-all duration-500"
+                    style={{ width: `${(dish.orders / (topDishes[0]?.orders || 1)) * 100}%` }}
+                  />
+                </div>
               </div>
-              <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-gold to-gold-light rounded-full transition-all duration-500"
-                  style={{ width: `${(dish.orders / 52) * 100}%` }}
-                />
-              </div>
+              <span className="text-sm font-semibold text-gold">
+                Rs {((dish.revenue ?? 0) / 1000).toFixed(0)}K
+              </span>
             </div>
-            <span className="text-sm font-semibold text-gold">
-              Rs {(dish.revenue / 1000).toFixed(0)}K
-            </span>
-          </div>
-        ))}
+          ))
+        ) : (
+          <p className="text-muted-foreground text-sm">No sales data available</p>
+        )}
       </div>
     </div>
   );

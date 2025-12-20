@@ -14,13 +14,14 @@ export default function ProfitPage() {
   const isLoading = ordersLoading || purchasesLoading || statsLoading;
 
   // Calculate profit metrics from real data
-  const totalRevenue = orders.reduce((acc, order) => acc + (order.total_value || 0), 0);
-  const totalCOGS = purchases.reduce((acc, p) => acc + (p.total_amount || 0), 0);
+  // Only count delivered/closed orders as revenue
+  const deliveredOrders = orders.filter(o => o.status === 'Delivered' || o.status === 'Closed');
+  const totalRevenue = deliveredOrders.reduce((acc, order) => acc + (order.total_value ?? 0), 0);
+  const totalCOGS = purchases.reduce((acc, p) => acc + ((p.quantity ?? 0) * (p.unit_price ?? 0)), 0);
   const grossProfit = totalRevenue - totalCOGS;
   const profitMargin = totalRevenue > 0 ? ((grossProfit / totalRevenue) * 100).toFixed(1) : '0';
 
   // Per-event profit
-  const deliveredOrders = orders.filter(o => o.status === 'Delivered' || o.status === 'Closed');
   const avgProfitPerEvent = deliveredOrders.length > 0 ? grossProfit / deliveredOrders.length : 0;
 
   // Monthly revenue data (from last 12 months of orders)
@@ -35,11 +36,11 @@ export default function ProfitPage() {
       monthlyRevenue[monthKey] = 0;
     }
 
-    orders.forEach(order => {
+    deliveredOrders.forEach(order => {
       const orderDate = new Date(order.event_date);
       const monthKey = orderDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
       if (monthKey in monthlyRevenue) {
-        monthlyRevenue[monthKey] += order.total_value || 0;
+        monthlyRevenue[monthKey] += order.total_value ?? 0;
       }
     });
 
@@ -53,9 +54,9 @@ export default function ProfitPage() {
   const getCategoryData = () => {
     const categoryRevenue = {};
     
-    orders.forEach(order => {
-      const type = order.client_type || 'Other';
-      categoryRevenue[type] = (categoryRevenue[type] || 0) + (order.total_value || 0);
+    deliveredOrders.forEach(order => {
+      const type = order.client_type ?? 'Other';
+      categoryRevenue[type] = (categoryRevenue[type] ?? 0) + (order.total_value ?? 0);
     });
 
     const colors = {
@@ -76,7 +77,7 @@ export default function ProfitPage() {
 
   // Average margin calculation
   const avgMargin = menuItems.length > 0
-    ? menuItems.reduce((acc, item) => acc + (item.margin_percent || 0), 0) / menuItems.length
+    ? menuItems.reduce((acc, item) => acc + (item.margin_percent ?? 0), 0) / menuItems.length
     : 0;
 
   if (isLoading) {
