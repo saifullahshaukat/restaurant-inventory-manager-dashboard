@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bell, Search, User, LogOut, Settings, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +19,7 @@ interface HeaderProps {
 }
 
 export function Header({ title, subtitle }: HeaderProps) {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
 
@@ -30,10 +32,20 @@ export function Header({ title, subtitle }: HeaderProps) {
     // Implement actual logout logic here
   };
 
+  const handleSettingsClick = () => {
+    navigate('/settings');
+  };
+
   return (
     <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-sm border-b border-border">
       <div className="flex items-center justify-between px-8 py-4">
         <div>
+          {/* Display Business Name if available */}
+          {profile?.business_name && (
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">
+              {profile.business_name}
+            </p>
+          )}
           <h1 className="font-display text-2xl font-semibold text-foreground">{title}</h1>
           {subtitle && (
             <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
@@ -102,7 +114,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                       <p className="text-xs text-muted-foreground">{profile.city}</p>
                     )}
                   </div>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleSettingsClick}>
                     <Settings className="w-4 h-4 mr-2" />
                     <span>Settings</span>
                   </DropdownMenuItem>

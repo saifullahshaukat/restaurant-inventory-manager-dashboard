@@ -1,26 +1,93 @@
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { mockOrders, mockPurchases, mockMenuItems, monthlyRevenueData } from '@/data/mockData';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { TrendingUp, TrendingDown, DollarSign, Receipt, Percent, Calculator } from 'lucide-react';
+import { useOrders, usePurchases, useMenuItems, useDashboardStats } from '@/hooks/api';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
+import { TrendingUp, TrendingDown, DollarSign, Receipt, Percent, Calculator, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export default function ProfitPage() {
-  // Calculate profit metrics
-  const totalRevenue = mockOrders.reduce((acc, order) => acc + order.totalValue, 0);
-  const totalCOGS = mockPurchases.reduce((acc, p) => acc + p.cost, 0);
+  // API hooks
+  const { data: orders = [], isLoading: ordersLoading } = useOrders();
+  const { data: purchases = [], isLoading: purchasesLoading } = usePurchases();
+  const { data: menuItems = [] } = useMenuItems();
+  const { data: dashboardStats, isLoading: statsLoading } = useDashboardStats();
+
+  const isLoading = ordersLoading || purchasesLoading || statsLoading;
+
+  // Calculate profit metrics from real data
+  const totalRevenue = orders.reduce((acc, order) => acc + (order.total_value || 0), 0);
+  const totalCOGS = purchases.reduce((acc, p) => acc + (p.total_amount || 0), 0);
   const grossProfit = totalRevenue - totalCOGS;
-  const profitMargin = ((grossProfit / totalRevenue) * 100).toFixed(1);
+  const profitMargin = totalRevenue > 0 ? ((grossProfit / totalRevenue) * 100).toFixed(1) : '0';
 
   // Per-event profit
-  const eventsCompleted = mockOrders.filter(o => o.status === 'Delivered' || o.status === 'Closed').length;
-  const avgProfitPerEvent = eventsCompleted > 0 ? grossProfit / eventsCompleted : 0;
+  const deliveredOrders = orders.filter(o => o.status === 'Delivered' || o.status === 'Closed');
+  const avgProfitPerEvent = deliveredOrders.length > 0 ? grossProfit / deliveredOrders.length : 0;
 
-  // Category breakdown for pie chart
-  const categoryData = [
-    { name: 'Wedding', value: 875000, color: 'hsl(38, 45%, 55%)' },
-    { name: 'Corporate', value: 90000, color: 'hsl(200, 60%, 50%)' },
-    { name: 'Family', value: 216000, color: 'hsl(145, 50%, 40%)' },
-    { name: 'Individual', value: 37500, color: 'hsl(35, 15%, 60%)' },
-  ];
+  // Monthly revenue data (from last 12 months of orders)
+  const getMonthlyData = () => {
+    const monthlyRevenue = {};
+    const currentDate = new Date();
+    
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(currentDate);
+      date.setMonth(date.getMonth() - i);
+      const monthKey = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      monthlyRevenue[monthKey] = 0;
+    }
+
+    orders.forEach(order => {
+      const orderDate = new Date(order.event_date);
+      const monthKey = orderDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      if (monthKey in monthlyRevenue) {
+        monthlyRevenue[monthKey] += order.total_value || 0;
+      }
+    });
+
+    return Object.entries(monthlyRevenue).map(([month, revenue]) => ({
+      month,
+      revenue: Math.round(revenue as number),
+    }));
+  };
+
+  // Category breakdown by order type
+  const getCategoryData = () => {
+    const categoryRevenue = {};
+    
+    orders.forEach(order => {
+      const type = order.client_type || 'Other';
+      categoryRevenue[type] = (categoryRevenue[type] || 0) + (order.total_value || 0);
+    });
+
+    const colors = {
+      'Wedding': 'hsl(38, 45%, 55%)',
+      'Corporate': 'hsl(200, 60%, 50%)',
+      'Family': 'hsl(145, 50%, 40%)',
+      'Individual': 'hsl(35, 15%, 60%)',
+      'Government': 'hsl(250, 60%, 50%)',
+      'Other': 'hsl(0, 0%, 50%)',
+    };
+
+    return Object.entries(categoryRevenue).map(([name, value]) => ({
+      name,
+      value: Math.round(value as number),
+      color: colors[name as keyof typeof colors] || colors['Other'],
+    }));
+  };
+
+  // Average margin calculation
+  const avgMargin = menuItems.length > 0
+    ? menuItems.reduce((acc, item) => acc + (item.margin_percent || 0), 0) / menuItems.length
+    : 0;
+
+  if (isLoading) {
+    return (
+      <DashboardLayout title="Profit Calculator" subtitle="Analyze your revenue and margins">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-gold" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="Profit Calculator" subtitle="Analyze your revenue and margins">
@@ -37,7 +104,7 @@ export default function ProfitPage() {
             Rs {(totalRevenue / 1000000).toFixed(2)}M
           </p>
           <p className="text-xs text-success mt-1 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" /> +12% from last month
+            <TrendingUp className="w-3 h-3" /> From {orders.length} orders
           </p>
         </div>
 
@@ -52,7 +119,7 @@ export default function ProfitPage() {
             Rs {(totalCOGS / 1000).toFixed(0)}K
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Direct ingredient costs
+            {purchases.length} purchases made
           </p>
         </div>
 
@@ -66,8 +133,9 @@ export default function ProfitPage() {
           <p className="font-display text-3xl font-semibold text-foreground">
             Rs {(grossProfit / 1000000).toFixed(2)}M
           </p>
-          <p className="text-xs text-success mt-1 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" /> Healthy margins
+          <p className={`text-xs mt-1 flex items-center gap-1 ${grossProfit >= 0 ? 'text-success' : 'text-destructive'}`}>
+            {grossProfit >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+            {grossProfit >= 0 ? 'Positive margin' : 'Loss'}
           </p>
         </div>
 
@@ -82,7 +150,7 @@ export default function ProfitPage() {
             {profitMargin}%
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Industry avg: 35%
+            Avg per dish: {avgMargin.toFixed(1)}%
           </p>
         </div>
       </div>
@@ -93,112 +161,99 @@ export default function ProfitPage() {
         <div className="lg:col-span-2 card-premium p-6">
           <div className="mb-6">
             <h3 className="font-display text-lg font-semibold text-foreground">Profit Trend</h3>
-            <p className="text-sm text-muted-foreground">Monthly profit analysis</p>
+            <p className="text-sm text-muted-foreground">Monthly revenue analysis</p>
           </div>
           
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={monthlyRevenueData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis 
-                dataKey="month" 
-                axisLine={false} 
-                tickLine={false}
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-              />
-              <YAxis 
-                axisLine={false} 
-                tickLine={false}
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
-              />
+            <LineChart data={getMonthlyData()}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" />
+              <YAxis stroke="hsl(var(--muted-foreground))" />
               <Tooltip 
                 contentStyle={{
                   backgroundColor: 'hsl(var(--card))',
                   border: '1px solid hsl(var(--border))',
                   borderRadius: '8px',
                 }}
-                formatter={(value: number) => [`Rs ${value.toLocaleString()}`, 'Profit']}
               />
-              <Bar 
-                dataKey="profit" 
-                fill="hsl(var(--success))" 
-                radius={[4, 4, 0, 0]} 
+              <Line 
+                type="monotone" 
+                dataKey="revenue" 
+                stroke="hsl(38, 92%, 50%)" 
+                strokeWidth={2}
+                dot={{ fill: 'hsl(38, 92%, 50%)', r: 4 }}
               />
-            </BarChart>
+            </LineChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Revenue by Category */}
+        {/* Category Breakdown */}
         <div className="card-premium p-6">
           <div className="mb-6">
-            <h3 className="font-display text-lg font-semibold text-foreground">Revenue by Client</h3>
-            <p className="text-sm text-muted-foreground">Distribution analysis</p>
+            <h3 className="font-display text-lg font-semibold text-foreground">Revenue by Category</h3>
+            <p className="text-sm text-muted-foreground">Order type distribution</p>
           </div>
-          
-          <ResponsiveContainer width="100%" height={200}>
+
+          <ResponsiveContainer width="100%" height={280}>
             <PieChart>
               <Pie
-                data={categoryData}
+                data={getCategoryData()}
                 cx="50%"
                 cy="50%"
-                innerRadius={50}
+                labelLine={false}
+                label={({ name, value }) => `${name} (Rs ${(value / 1000).toFixed(0)}K)`}
                 outerRadius={80}
-                paddingAngle={3}
+                fill="#8884d8"
                 dataKey="value"
               >
-                {categoryData.map((entry, index) => (
+                {getCategoryData().map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip 
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                }}
-                formatter={(value: number) => [`Rs ${(value / 1000).toFixed(0)}K`, '']}
-              />
             </PieChart>
           </ResponsiveContainer>
-
-          <div className="space-y-2 mt-4">
-            {categoryData.map((item) => (
-              <div key={item.name} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span className="text-muted-foreground">{item.name}</span>
-                </div>
-                <span className="font-medium">Rs {(item.value / 1000).toFixed(0)}K</span>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
 
-      {/* Dish Profitability */}
-      <div className="card-premium p-6">
-        <div className="mb-6">
-          <h3 className="font-display text-lg font-semibold text-foreground">Dish Profitability</h3>
-          <p className="text-sm text-muted-foreground">Margin analysis per menu item</p>
+      {/* Additional Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="card-premium p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Delivered Orders</p>
+              <p className="font-display text-2xl font-semibold">{deliveredOrders.length}</p>
+            </div>
+            <Calculator className="w-8 h-8 text-gold opacity-20" />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Avg profit per event: Rs {(avgProfitPerEvent / 1000).toFixed(1)}K
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          {mockMenuItems.map((item) => (
-            <div key={item.id} className="p-4 rounded-lg bg-secondary/30 border border-border/50">
-              <p className="font-medium text-foreground text-sm mb-2">{item.name}</p>
-              <div className="flex items-center justify-between text-xs mb-2">
-                <span className="text-muted-foreground">Cost: Rs {item.costPerServing}</span>
-                <span className="text-gold font-medium">Price: Rs {item.sellingPrice}</span>
-              </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-success to-success/70 rounded-full"
-                  style={{ width: `${item.marginPercent}%` }}
-                />
-              </div>
-              <p className="text-xs text-success font-semibold mt-1">{item.marginPercent}% margin</p>
+        <div className="card-premium p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Total Orders</p>
+              <p className="font-display text-2xl font-semibold">{orders.length}</p>
             </div>
-          ))}
+            <Receipt className="w-8 h-8 text-info opacity-20" />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Avg order value: Rs {(totalRevenue / orders.length / 1000).toFixed(1)}K
+          </p>
+        </div>
+
+        <div className="card-premium p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Menu Items</p>
+              <p className="font-display text-2xl font-semibold">{menuItems.length}</p>
+            </div>
+            <TrendingUp className="w-8 h-8 text-success opacity-20" />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Avg margin: {avgMargin.toFixed(1)}%
+          </p>
         </div>
       </div>
     </DashboardLayout>

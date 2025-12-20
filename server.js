@@ -651,6 +651,182 @@ app.get('/api/dashboard/stats', async (req, res) => {
 });
 
 // ============================================================================
+// ROLES ENDPOINTS (v2.1)
+// ============================================================================
+
+// GET all roles for business
+app.get('/api/roles', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT r.*, 
+        (SELECT json_agg(permission) FROM role_permissions WHERE role_id = r.id) as permissions
+      FROM roles r
+      ORDER BY r.name
+    `);
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Error fetching roles:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// CREATE role
+app.post('/api/roles', async (req, res) => {
+  const { name, description } = req.body;
+
+  try {
+    const result = await pool.query(`
+      INSERT INTO roles (name, description, is_system_role)
+      VALUES ($1, $2, false)
+      RETURNING id, name, description
+    `, [name, description]);
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error creating role:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// UPDATE role
+app.put('/api/roles/:id', async (req, res) => {
+  const { name, description } = req.body;
+
+  try {
+    const result = await pool.query(`
+      UPDATE roles
+      SET name = $1, description = $2, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $3 AND is_system_role = false
+      RETURNING id, name, description
+    `, [name, description, req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Role not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating role:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================================================
+// STAFF ENDPOINTS (v2.1)
+// ============================================================================
+
+// GET all staff
+app.get('/api/staff', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT s.*, r.name as role_name, r.description as role_description
+      FROM staff s
+      LEFT JOIN roles r ON s.role_id = r.id
+      WHERE s.deleted_at IS NULL
+      ORDER BY s.name
+    `);
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Error fetching staff:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET single staff member
+app.get('/api/staff/:id', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT s.*, r.name as role_name
+      FROM staff s
+      LEFT JOIN roles r ON s.role_id = r.id
+      WHERE s.id = $1 AND s.deleted_at IS NULL
+    `, [req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Staff member not found' });
+    }
+
+    // Get permissions for this staff member's role
+    const permissions = await pool.query(`
+      SELECT permission FROM role_permissions WHERE role_id = $1
+    `, [result.rows[0].role_id]);
+
+    res.json({ 
+      success: true, 
+      data: {
+        ...result.rows[0],
+        permissions: permissions.rows.map(p => p.permission)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching staff member:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// CREATE staff member
+app.post('/api/staff', async (req, res) => {
+  const { name, email, phone, role_id, position, hire_date } = req.body;
+
+  try {
+    const result = await pool.query(`
+      INSERT INTO staff (name, email, phone, role_id, position, hire_date, is_active)
+      VALUES ($1, $2, $3, $4, $5, $6, true)
+      RETURNING id, name, email, phone, role_id, position, hire_date
+    `, [name, email, phone, role_id, position, hire_date]);
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error creating staff member:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// UPDATE staff member
+app.put('/api/staff/:id', async (req, res) => {
+  const { name, email, phone, role_id, position, is_active } = req.body;
+
+  try {
+    const result = await pool.query(`
+      UPDATE staff
+      SET name = $1, email = $2, phone = $3, role_id = $4, position = $5, is_active = $6, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $7 AND deleted_at IS NULL
+      RETURNING id, name, email, phone, role_id, position, is_active
+    `, [name, email, phone, role_id, position, is_active, req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Staff member not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating staff member:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE staff member (soft delete)
+app.delete('/api/staff/:id', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      UPDATE staff
+      SET deleted_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      RETURNING id
+    `, [req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Staff member not found' });
+    }
+
+    res.json({ success: true, message: 'Staff member deleted' });
+  } catch (error) {
+    console.error('Error deleting staff member:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================================================
 // HEALTH CHECK
 // ============================================================================
 
@@ -697,5 +873,13 @@ app.listen(PORT, () => {
   console.log(`   GET    /api/search?q=query`);
   console.log(`   GET    /api/profile`);
   console.log(`   GET    /api/dashboard/stats`);
+  console.log(`   GET    /api/roles`);
+  console.log(`   POST   /api/roles`);
+  console.log(`   PUT    /api/roles/:id`);
+  console.log(`   GET    /api/staff`);
+  console.log(`   GET    /api/staff/:id`);
+  console.log(`   POST   /api/staff`);
+  console.log(`   PUT    /api/staff/:id`);
+  console.log(`   DELETE /api/staff/:id`);
   console.log(`\n`);
 });

@@ -333,6 +333,67 @@ CREATE INDEX idx_stock_movements_created_at ON stock_movements(created_at);
 CREATE INDEX idx_stock_movements_movement_type ON stock_movements(movement_type);
 
 -- ============================================================================
+-- ROLES TABLE (v2.1 - Role-based access control)
+-- ============================================================================
+CREATE TABLE roles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  name VARCHAR(100) NOT NULL,
+  description TEXT,
+  is_system_role BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(business_id, name)
+);
+
+CREATE INDEX idx_roles_business_id ON roles(business_id);
+
+-- ============================================================================
+-- STAFF TABLE (v2.1 - Team members)
+-- ============================================================================
+CREATE TABLE staff (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255),
+  phone VARCHAR(20),
+  role_id UUID NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+  position VARCHAR(100),
+  salary DECIMAL(12, 2),
+  hire_date DATE,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  deleted_at TIMESTAMP
+);
+
+CREATE INDEX idx_staff_business_id ON staff(business_id);
+CREATE INDEX idx_staff_role_id ON staff(role_id);
+CREATE INDEX idx_staff_user_id ON staff(user_id);
+CREATE INDEX idx_staff_is_active ON staff(is_active);
+
+-- ============================================================================
+-- ROLE_PERMISSIONS TABLE (v2.1 - Permission mapping)
+-- ============================================================================
+CREATE TABLE role_permissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+  permission VARCHAR(100) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(role_id, permission)
+);
+
+CREATE INDEX idx_role_permissions_role_id ON role_permissions(role_id);
+CREATE INDEX idx_role_permissions_permission ON role_permissions(permission);
+
+-- ============================================================================
+-- Update users table to include role_id
+-- ============================================================================
+ALTER TABLE users ADD COLUMN role_id UUID REFERENCES roles(id) ON DELETE SET NULL;
+CREATE INDEX idx_users_role_id ON users(role_id);
+
+-- ============================================================================
 -- NOTIFICATIONS TABLE (v1.1 - Alert system)
 -- ============================================================================
 CREATE TABLE notifications (
@@ -431,6 +492,47 @@ EXECUTE FUNCTION update_purchase_final_amount();
 -- Insert sample business
 INSERT INTO businesses (id, name, tagline, email, phone, city, country) VALUES
 ('550e8400-e29b-41d4-a716-446655440000', 'Mommy''s Kitchen', 'Artisan Catering & Gourmet Home Dining', 'hello@mommyskitchen.pk', '0332-5172782', 'Karachi', 'Pakistan');
+
+-- Insert roles for business
+INSERT INTO roles (id, business_id, name, description, is_system_role) VALUES
+('560e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440000', 'Super Admin', 'Full system access and business configuration', true),
+('560e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440000', 'Manager', 'Can manage menu, orders, and inventory', true),
+('560e8400-e29b-41d4-a716-446655440003', '550e8400-e29b-41d4-a716-446655440000', 'Staff', 'Can view and update menu and orders', true),
+('560e8400-e29b-41d4-a716-446655440004', '550e8400-e29b-41d4-a716-446655440000', 'Viewer', 'Read-only access to reports and analytics', true);
+
+-- Insert permissions for Super Admin role
+INSERT INTO role_permissions (role_id, permission) VALUES
+('560e8400-e29b-41d4-a716-446655440001', 'manage_staff'),
+('560e8400-e29b-41d4-a716-446655440001', 'manage_roles'),
+('560e8400-e29b-41d4-a716-446655440001', 'manage_menu'),
+('560e8400-e29b-41d4-a716-446655440001', 'manage_inventory'),
+('560e8400-e29b-41d4-a716-446655440001', 'manage_orders'),
+('560e8400-e29b-41d4-a716-446655440001', 'manage_purchases'),
+('560e8400-e29b-41d4-a716-446655440001', 'view_reports'),
+('560e8400-e29b-41d4-a716-446655440001', 'manage_settings'),
+('560e8400-e29b-41d4-a716-446655440001', 'manage_clients'),
+('560e8400-e29b-41d4-a716-446655440001', 'manage_suppliers');
+
+-- Insert permissions for Manager role
+INSERT INTO role_permissions (role_id, permission) VALUES
+('560e8400-e29b-41d4-a716-446655440002', 'manage_menu'),
+('560e8400-e29b-41d4-a716-446655440002', 'manage_inventory'),
+('560e8400-e29b-41d4-a716-446655440002', 'manage_orders'),
+('560e8400-e29b-41d4-a716-446655440002', 'manage_purchases'),
+('560e8400-e29b-41d4-a716-446655440002', 'view_reports'),
+('560e8400-e29b-41d4-a716-446655440002', 'manage_clients'),
+('560e8400-e29b-41d4-a716-446655440002', 'manage_suppliers');
+
+-- Insert permissions for Staff role
+INSERT INTO role_permissions (role_id, permission) VALUES
+('560e8400-e29b-41d4-a716-446655440003', 'manage_menu'),
+('560e8400-e29b-41d4-a716-446655440003', 'manage_orders'),
+('560e8400-e29b-41d4-a716-446655440003', 'manage_inventory'),
+('560e8400-e29b-41d4-a716-446655440003', 'view_reports');
+
+-- Insert permissions for Viewer role
+INSERT INTO role_permissions (role_id, permission) VALUES
+('560e8400-e29b-41d4-a716-446655440004', 'view_reports');
 
 -- Insert sample suppliers
 INSERT INTO suppliers (id, business_id, name, email, phone, contact_person, is_active) VALUES
