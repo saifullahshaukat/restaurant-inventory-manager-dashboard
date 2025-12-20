@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -12,6 +12,7 @@ import {
   Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import axios from 'axios';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -25,6 +26,28 @@ const navigation = [
 export function Sidebar() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
+  const [businessName, setBusinessName] = useState('');
+  const [tagline, setTagline] = useState('');
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const fetchProfile = async () => {
+    try {
+      const response = await axios.get('/api/profile');
+      if (response.data.success) {
+        setBusinessName(response.data.data.name || '');
+        setTagline(response.data.data.tagline || '');
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    }
+  };
+
+  const getInitial = () => {
+    return businessName.charAt(0).toUpperCase() || 'B';
+  };
 
   return (
     <aside 
@@ -37,14 +60,14 @@ export function Sidebar() {
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-gold flex items-center justify-center flex-shrink-0">
-            <span className="font-display text-primary-foreground text-lg font-bold">M</span>
+            <span className="font-display text-primary-foreground text-lg font-bold">{getInitial()}</span>
           </div>
           {!collapsed && (
             <div className="animate-fade-in">
               <h1 className="font-display text-lg font-semibold text-foreground leading-tight">
-                Mommy's Kitchen
+                {businessName || 'Business'}
               </h1>
-              <p className="text-xs text-muted-foreground">Artisan Catering</p>
+              <p className="text-xs text-muted-foreground">{tagline}</p>
             </div>
           )}
         </div>

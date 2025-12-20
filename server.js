@@ -605,7 +605,7 @@ app.get('/api/search', async (req, res) => {
 app.get('/api/profile', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT name, tagline, city, email, phone FROM businesses LIMIT 1
+      SELECT id, name, tagline FROM businesses LIMIT 1
     `);
 
     if (result.rows.length === 0) {
@@ -615,15 +615,43 @@ app.get('/api/profile', async (req, res) => {
     res.json({ 
       success: true, 
       data: {
+        id: result.rows[0].id,
         name: result.rows[0].name,
-        email: result.rows[0].email,
-        phone: result.rows[0].phone,
-        city: result.rows[0].city,
+        tagline: result.rows[0].tagline,
         role: 'Admin'
       }
     });
   } catch (error) {
     console.error('Error fetching profile:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// UPDATE profile
+app.put('/api/profile', async (req, res) => {
+  const { name, tagline } = req.body;
+
+  try {
+    const result = await pool.query(`
+      UPDATE businesses 
+      SET name = COALESCE($1, name), 
+          tagline = COALESCE($2, tagline),
+          updated_at = NOW()
+      WHERE id = (SELECT id FROM businesses LIMIT 1)
+      RETURNING id, name, tagline
+    `, [name, tagline]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Business not found' });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Profile updated successfully',
+      data: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error updating profile:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -637,10 +665,12 @@ app.get('/api/dashboard/stats', async (req, res) => {
   try {
     const stats = await pool.query(`
       SELECT 
-        (SELECT COUNT(*) FROM orders WHERE status != 'Closed') as pending_orders,
-        (SELECT COUNT(*) FROM inventory_items WHERE current_stock <= minimum_stock) as low_stock_items,
-        (SELECT SUM(remaining_balance) FROM orders WHERE status IN ('Inquiry', 'Confirmed', 'In Progress')) as pending_payments,
-        (SELECT SUM(total_value) FROM orders WHERE DATE(event_date) = CURRENT_DATE) as today_revenue
+        (SELECT COUNT(*) FROM orders WHERE status IN ('Inquiry', 'Confirmed', 'In Progress')) as pending_orders,
+        (SELECT COUNT(DISTINCT DATE(event_date)) FROM orders WHERE DATE(event_date) >= CURRENT_DATE AND status != 'Closed') as upcoming_events,
+        (SELECT COUNT(*) FROM inventory_items WHERE current_stock <= minimum_stock AND is_active = true) as low_stock_count,
+        (SELECT SUM(current_stock * cost_per_unit) FROM inventory_items WHERE is_active = true) as inventory_value,
+        (SELECT SUM(total_value) FROM orders WHERE DATE_TRUNC('month', event_date) = DATE_TRUNC('month', CURRENT_DATE) AND status IN ('In Progress', 'Delivered')) as monthly_revenue,
+        (SELECT SUM(total_value) FROM orders WHERE status = 'Delivered') as total_sales
     `);
 
     res.json({ success: true, data: stats.rows[0] });
@@ -872,6 +902,7 @@ app.listen(PORT, () => {
   console.log(`   PUT    /api/orders/:id`);
   console.log(`   GET    /api/search?q=query`);
   console.log(`   GET    /api/profile`);
+  console.log(`   PUT    /api/profile`);
   console.log(`   GET    /api/dashboard/stats`);
   console.log(`   GET    /api/roles`);
   console.log(`   POST   /api/roles`);

@@ -1,12 +1,83 @@
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Building2, Phone, Mail, MapPin, Bell, Shield, Palette } from 'lucide-react';
+import { Building2, Bell, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import axios from 'axios';
 
 export default function SettingsPage() {
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    tagline: '',
+  });
+  const [notifications, setNotifications] = useState({
+    lowStock: true,
+    newOrders: true,
+    paymentReminders: false,
+  });
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const fetchProfile = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get('/api/profile');
+      if (response.data.success) {
+        setFormData({
+          name: response.data.data.name || '',
+          tagline: response.data.data.tagline || '',
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      toast.error('Failed to load business settings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!formData.name.trim()) {
+      toast.error('Business name is required');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const response = await axios.put('/api/profile', {
+        name: formData.name,
+        tagline: formData.tagline,
+      });
+
+      if (response.data.success) {
+        toast.success('Business settings updated successfully!');
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      toast.error('Failed to update business settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <DashboardLayout title="Settings" subtitle="Manage your business preferences">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-gold" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout title="Settings" subtitle="Manage your business preferences">
       <div className="max-w-3xl">
@@ -25,25 +96,23 @@ export default function SettingsPage() {
           <div className="space-y-4">
             <div>
               <Label htmlFor="businessName">Business Name</Label>
-              <Input id="businessName" defaultValue="The Mommy's Kitchen" className="mt-1.5" />
+              <Input 
+                id="businessName" 
+                placeholder="Enter your business name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="mt-1.5" 
+              />
             </div>
             <div>
               <Label htmlFor="tagline">Tagline</Label>
-              <Input id="tagline" defaultValue="Artisan Catering & Gourmet Home Dining" className="mt-1.5" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="phone">Phone</Label>
-                <Input id="phone" defaultValue="0332-5172782" className="mt-1.5" />
-              </div>
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" defaultValue="hello@mommyskitchen.pk" className="mt-1.5" />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="address">Location</Label>
-              <Input id="address" defaultValue="Karachi, Pakistan" className="mt-1.5" />
+              <Input 
+                id="tagline" 
+                placeholder="Enter a tagline (e.g., 'Catering & Event Services')"
+                value={formData.tagline}
+                onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
+                className="mt-1.5" 
+              />
             </div>
           </div>
         </div>
@@ -66,7 +135,10 @@ export default function SettingsPage() {
                 <p className="font-medium text-foreground">Low Stock Alerts</p>
                 <p className="text-sm text-muted-foreground">Get notified when stock falls below minimum</p>
               </div>
-              <Switch defaultChecked />
+              <Switch 
+                checked={notifications.lowStock}
+                onCheckedChange={(checked) => setNotifications({ ...notifications, lowStock: checked })}
+              />
             </div>
             <Separator />
             <div className="flex items-center justify-between">
@@ -74,7 +146,10 @@ export default function SettingsPage() {
                 <p className="font-medium text-foreground">New Order Notifications</p>
                 <p className="text-sm text-muted-foreground">Alert when a new inquiry is received</p>
               </div>
-              <Switch defaultChecked />
+              <Switch 
+                checked={notifications.newOrders}
+                onCheckedChange={(checked) => setNotifications({ ...notifications, newOrders: checked })}
+              />
             </div>
             <Separator />
             <div className="flex items-center justify-between">
@@ -82,15 +157,31 @@ export default function SettingsPage() {
                 <p className="font-medium text-foreground">Payment Reminders</p>
                 <p className="text-sm text-muted-foreground">Remind clients about pending payments</p>
               </div>
-              <Switch />
+              <Switch 
+                checked={notifications.paymentReminders}
+                onCheckedChange={(checked) => setNotifications({ ...notifications, paymentReminders: checked })}
+              />
             </div>
           </div>
         </div>
 
         {/* Save */}
         <div className="flex justify-end gap-3">
-          <Button variant="outline">Cancel</Button>
-          <Button className="bg-gold hover:bg-gold-light text-primary-foreground">Save Changes</Button>
+          <Button variant="outline" onClick={() => fetchProfile()}>Cancel</Button>
+          <Button 
+            className="bg-gold hover:bg-gold-light text-primary-foreground"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Save Changes'
+            )}
+          </Button>
         </div>
       </div>
     </DashboardLayout>
