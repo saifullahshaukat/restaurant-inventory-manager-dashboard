@@ -1,9 +1,17 @@
 import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { usePurchases, useCreatePurchase } from '@/hooks/api';
+import { usePurchases, useCreatePurchase, useSuppliers, useCreateSupplier } from '@/hooks/api';
 import { GroceryPurchase } from '@/types';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -26,6 +34,7 @@ import { toast } from 'sonner';
 export default function PurchasesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isLogPurchaseDialogOpen, setIsLogPurchaseDialogOpen] = useState(false);
+  const [isAddSupplierDialogOpen, setIsAddSupplierDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     item_id: '',
     supplier_id: '',
@@ -33,10 +42,19 @@ export default function PurchasesPage() {
     quantity: '',
     cost: '',
   });
+  const [supplierFormData, setSupplierFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    city: '',
+  });
 
   // API hooks
   const { data: purchases = [], isLoading, error, refetch } = usePurchases();
+  const { data: suppliers = [] } = useSuppliers();
   const createPurchase = useCreatePurchase();
+  const createSupplier = useCreateSupplier();
 
   const filteredPurchases = purchases.filter(p =>
     (p.supplier_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
@@ -49,6 +67,34 @@ export default function PurchasesPage() {
     .filter(p => new Date(p.purchase_date).getMonth() === new Date().getMonth())
     .reduce((acc, p) => acc + (p.quantity * p.cost_per_unit), 0);
 
+  const handleAddSupplier = async () => {
+    if (!supplierFormData.name) {
+      toast.error('Please fill in supplier name');
+      return;
+    }
+
+    try {
+      await createSupplier.mutateAsync({
+        name: supplierFormData.name,
+        email: supplierFormData.email,
+        phone: supplierFormData.phone,
+        address: supplierFormData.address,
+        city: supplierFormData.city,
+      });
+      toast.success('Supplier added successfully!');
+      setIsAddSupplierDialogOpen(false);
+      setSupplierFormData({
+        name: '',
+        email: '',
+        phone: '',
+        address: '',
+        city: '',
+      });
+    } catch (error) {
+      toast.error('Failed to add supplier');
+    }
+  };
+
   const handleLogPurchase = async () => {
     if (!formData.supplier_id || !formData.purchase_date || !formData.quantity || !formData.cost) {
       toast.error('Please fill in all required fields');
@@ -57,10 +103,12 @@ export default function PurchasesPage() {
 
     try {
       await createPurchase.mutateAsync({
-        supplier_id: parseInt(formData.supplier_id),
+        supplier_id: formData.supplier_id,
         purchase_date: formData.purchase_date,
-        quantity: parseFloat(formData.quantity),
-        cost_per_unit: parseFloat(formData.cost),
+        items: [{
+          quantity: parseFloat(formData.quantity),
+          unit_price: parseFloat(formData.cost),
+        }],
       });
       toast.success('Purchase logged successfully!');
       setIsLogPurchaseDialogOpen(false);
@@ -111,13 +159,28 @@ export default function PurchasesPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium">Supplier ID *</label>
-              <Input
-                placeholder="e.g., 1"
-                type="number"
-                value={formData.supplier_id}
-                onChange={(e) => setFormData({ ...formData, supplier_id: e.target.value })}
-              />
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium">Supplier *</label>
+                <Button 
+                  size="sm" 
+                  variant="ghost"
+                  onClick={() => setIsAddSupplierDialogOpen(true)}
+                >
+                  <Plus className="w-4 h-4 mr-1" /> Add New
+                </Button>
+              </div>
+              <Select value={formData.supplier_id} onValueChange={(value) => setFormData({ ...formData, supplier_id: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a supplier" />
+                </SelectTrigger>
+                <SelectContent>
+                  {suppliers.map((supplier) => (
+                    <SelectItem key={supplier.id} value={supplier.id}>
+                      {supplier.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="text-sm font-medium">Purchase Date *</label>
@@ -164,6 +227,80 @@ export default function PurchasesPage() {
                 <>
                   <Plus className="w-4 h-4 mr-2" />
                   Log Purchase
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog for Add Supplier */}
+      <Dialog open={isAddSupplierDialogOpen} onOpenChange={setIsAddSupplierDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Supplier</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Supplier Name *</label>
+              <Input
+                placeholder="e.g., Fresh Vegetables Ltd"
+                value={supplierFormData.name}
+                onChange={(e) => setSupplierFormData({ ...supplierFormData, name: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Email</label>
+              <Input
+                type="email"
+                placeholder="supplier@example.com"
+                value={supplierFormData.email}
+                onChange={(e) => setSupplierFormData({ ...supplierFormData, email: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Phone</label>
+              <Input
+                placeholder="0300-1234567"
+                value={supplierFormData.phone}
+                onChange={(e) => setSupplierFormData({ ...supplierFormData, phone: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Address</label>
+              <Input
+                placeholder="Street address"
+                value={supplierFormData.address}
+                onChange={(e) => setSupplierFormData({ ...supplierFormData, address: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">City</label>
+              <Input
+                placeholder="City"
+                value={supplierFormData.city}
+                onChange={(e) => setSupplierFormData({ ...supplierFormData, city: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddSupplierDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-gold hover:bg-gold-light"
+              onClick={handleAddSupplier}
+              disabled={createSupplier.isPending}
+            >
+              {createSupplier.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Supplier
                 </>
               )}
             </Button>

@@ -12,6 +12,7 @@ import {
   searchAPI,
   userAPI,
   dashboardAPI,
+  suppliersAPI,
 } from '@/lib/api';
 
 // ============================================================================
@@ -250,5 +251,29 @@ export const useDashboardStats = () => {
       return response.data.data;
     },
     refetchInterval: 30000, // Refetch every 30 seconds
+  });
+};
+
+// ============================================================================
+// SUPPLIERS HOOKS
+// ============================================================================
+
+export const useSuppliers = () => {
+  return useQuery({
+    queryKey: ['suppliers'],
+    queryFn: async () => {
+      const response = await suppliersAPI.getAll();
+      return response.data.data;
+    },
+  });
+};
+
+export const useCreateSupplier = () => {
+  const queryClient = useQueryClient();
+  return useMutation<any, Error, any>({
+    mutationFn: (data) => suppliersAPI.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+    },
   });
 };

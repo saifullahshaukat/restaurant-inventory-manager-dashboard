@@ -99,7 +99,7 @@ export default function OrdersPage() {
     try {
       await updateOrderStatus.mutateAsync({
         id: orderId,
-        status: newStatus as OrderStatus,
+        data: { status: newStatus as OrderStatus },
       });
       toast.success('Order status updated!');
     } catch (error) {

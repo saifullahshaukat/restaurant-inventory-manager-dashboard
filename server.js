@@ -360,6 +360,65 @@ app.put('/api/inventory/:id/stock', async (req, res) => {
 });
 
 // ============================================================================
+// SUPPLIERS ENDPOINTS
+// ============================================================================
+
+// GET all suppliers for a business
+app.get('/api/suppliers', async (req, res) => {
+  try {
+    // Get the business ID (for now, using the first/only business)
+    const businessResult = await pool.query('SELECT id FROM businesses LIMIT 1');
+    const businessId = businessResult.rows[0]?.id;
+
+    if (!businessId) {
+      return res.status(400).json({ success: false, error: 'No business found' });
+    }
+
+    const result = await pool.query(`
+      SELECT id, name, email, phone, address, city, payment_terms, contact_person, is_active
+      FROM suppliers
+      WHERE business_id = $1 AND is_active = true
+      ORDER BY name
+    `, [businessId]);
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Error fetching suppliers:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// CREATE supplier
+app.post('/api/suppliers', async (req, res) => {
+  const { name, email, phone, address, city, payment_terms, contact_person } = req.body;
+
+  try {
+    // Get the business ID (for now, using the first/only business)
+    const businessResult = await pool.query('SELECT id FROM businesses LIMIT 1');
+    const businessId = businessResult.rows[0]?.id;
+
+    if (!businessId) {
+      return res.status(400).json({ success: false, error: 'No business found' });
+    }
+
+    const result = await pool.query(`
+      INSERT INTO suppliers 
+      (business_id, name, email, phone, address, city, payment_terms, contact_person, is_active)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
+      RETURNING id, name, email, phone, address, city, payment_terms, contact_person
+    `, [businessId, name, email, phone, address, city, payment_terms, contact_person]);
+
+    res.status(201).json({ 
+      success: true, 
+      message: 'Supplier created successfully',
+      data: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error creating supplier:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================================================
 // PURCHASES ENDPOINTS
 // ============================================================================
 
