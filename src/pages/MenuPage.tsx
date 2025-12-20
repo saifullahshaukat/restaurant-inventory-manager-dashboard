@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { mockMenuItems } from '@/data/mockData';
-import { MenuItem, DishCategory } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,8 +10,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import { Plus, Search, UtensilsCrossed, TrendingUp, Edit, Trash2 } from 'lucide-react';
+import { Plus, Search, UtensilsCrossed, TrendingUp, Edit, Trash2, Loader2 } from 'lucide-react';
+import { useMenuItems, useCreateMenuItem, useDeleteMenuItem } from '@/hooks/api';
+import { toast } from 'sonner';
 
 const categoryColors: Record<string, string> = {
   'Main': 'bg-gold/10 text-gold border-gold/20',
@@ -27,7 +34,19 @@ const categoryColors: Record<string, string> = {
 export default function MenuPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [menuItems] = useState<MenuItem[]>(mockMenuItems);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    category: 'Main',
+    cost_per_serving: '',
+    selling_price: '',
+  });
+
+  // API hooks
+  const { data: menuItems = [], isLoading, error, refetch } = useMenuItems();
+  const createMenuItem = useCreateMenuItem();
+  const deleteMenuItem = useDeleteMenuItem();
 
   const filteredItems = menuItems.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -36,8 +55,77 @@ export default function MenuPage() {
   });
 
   // Calculate summary stats
-  const avgMargin = menuItems.reduce((acc, item) => acc + item.marginPercent, 0) / menuItems.length;
+  const avgMargin = menuItems.length > 0
+    ? menuItems.reduce((acc, item) => acc + (item.margin_percent || 0), 0) / menuItems.length
+    : 0;
   const totalItems = menuItems.length;
+  const activeItems = menuItems.filter(i => i.is_available).length;
+
+  const handleAddDish = async () => {
+    if (!formData.name || !formData.cost_per_serving || !formData.selling_price) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      await createMenuItem.mutateAsync({
+        name: formData.name,
+        description: formData.description,
+        category: formData.category,
+        cost_per_serving: parseFloat(formData.cost_per_serving),
+        selling_price: parseFloat(formData.selling_price),
+        is_vegetarian: false,
+        prep_time_minutes: 30,
+      });
+      toast.success('Dish added successfully!');
+      setIsAddDialogOpen(false);
+      setFormData({
+        name: '',
+        description: '',
+        category: 'Main',
+        cost_per_serving: '',
+        selling_price: '',
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to add dish');
+    }
+  };
+
+  const handleDeleteDish = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this dish?')) return;
+
+    try {
+      await deleteMenuItem.mutateAsync(id);
+      toast.success('Dish deleted successfully!');
+    } catch (error) {
+      toast.error('Failed to delete dish');
+    }
+  };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <DashboardLayout title="Menu & Costing" subtitle="Manage your dishes and pricing">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-gold" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <DashboardLayout title="Menu & Costing" subtitle="Manage your dishes and pricing">
+        <div className="p-8 text-red-500 text-center">
+          Failed to load menu items. Make sure the backend server is running.
+          <Button onClick={() => refetch()} className="mt-4">
+            Try Again
+          </Button>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="Menu & Costing" subtitle="Manage your dishes and pricing">
@@ -72,7 +160,7 @@ export default function MenuPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Active Items</p>
-              <p className="font-display text-2xl font-semibold">{menuItems.filter(i => i.isAvailable).length}</p>
+              <p className="font-display text-2xl font-semibold">{activeItems}</p>
             </div>
           </div>
         </div>
@@ -89,7 +177,7 @@ export default function MenuPage() {
             className="pl-10"
           />
         </div>
-        
+
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="All Categories" />
@@ -105,11 +193,97 @@ export default function MenuPage() {
           </SelectContent>
         </Select>
 
-        <Button className="bg-gold hover:bg-gold-light text-primary-foreground">
+        <Button
+          className="bg-gold hover:bg-gold-light text-primary-foreground"
+          onClick={() => setIsAddDialogOpen(true)}
+        >
           <Plus className="w-4 h-4 mr-2" />
           Add Dish
         </Button>
       </div>
+
+      {/* Add Dish Dialog */}
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Dish</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Dish Name *</label>
+              <Input
+                placeholder="e.g., Biryani, Karahi, Haleem"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Description</label>
+              <Input
+                placeholder="Brief description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Category</label>
+              <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Main">Main</SelectItem>
+                  <SelectItem value="BBQ">BBQ</SelectItem>
+                  <SelectItem value="Rice">Rice</SelectItem>
+                  <SelectItem value="Dessert">Dessert</SelectItem>
+                  <SelectItem value="Live Station">Live Station</SelectItem>
+                  <SelectItem value="Appetizer">Appetizer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Cost per Serving (Rs) *</label>
+              <Input
+                placeholder="e.g., 150"
+                type="number"
+                value={formData.cost_per_serving}
+                onChange={(e) => setFormData({ ...formData, cost_per_serving: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Selling Price (Rs) *</label>
+              <Input
+                placeholder="e.g., 350"
+                type="number"
+                value={formData.selling_price}
+                onChange={(e) => setFormData({ ...formData, selling_price: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-gold hover:bg-gold-light"
+              onClick={handleAddDish}
+              disabled={createMenuItem.isPending}
+            >
+              {createMenuItem.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Dish
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Menu Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -120,10 +294,12 @@ export default function MenuPage() {
                 {item.category}
               </Badge>
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Button variant="ghost" size="icon" className="h-7 w-7">
-                  <Edit className="w-3.5 h-3.5 text-muted-foreground" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => handleDeleteDish(item.id)}
+                >
                   <Trash2 className="w-3.5 h-3.5 text-destructive" />
                 </Button>
               </div>
@@ -133,33 +309,26 @@ export default function MenuPage() {
               {item.name}
             </h3>
 
-            <div className="flex flex-wrap gap-1 mb-4">
-              {item.ingredients.slice(0, 3).map((ing, idx) => (
-                <span key={idx} className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
-                  {ing}
-                </span>
-              ))}
-              {item.ingredients.length > 3 && (
-                <span className="text-xs text-muted-foreground">+{item.ingredients.length - 3}</span>
-              )}
-            </div>
+            {item.description && (
+              <p className="text-xs text-muted-foreground mb-3">{item.description}</p>
+            )}
 
             <div className="grid grid-cols-3 gap-2 pt-3 border-t border-border">
               <div>
                 <p className="text-xs text-muted-foreground">Cost</p>
-                <p className="font-semibold text-foreground">Rs {item.costPerServing}</p>
+                <p className="font-semibold text-foreground">Rs {item.cost_per_serving}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Price</p>
-                <p className="font-semibold text-gold">Rs {item.sellingPrice}</p>
+                <p className="font-semibold text-gold">Rs {item.selling_price}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Margin</p>
                 <p className={cn(
                   "font-semibold",
-                  item.marginPercent >= 50 ? "text-success" : "text-warning"
+                  (item.margin_percent || 0) >= 50 ? "text-success" : "text-warning"
                 )}>
-                  {item.marginPercent}%
+                  {item.margin_percent?.toFixed(0) || 0}%
                 </p>
               </div>
             </div>
@@ -169,7 +338,16 @@ export default function MenuPage() {
 
       {filteredItems.length === 0 && (
         <div className="py-12 text-center card-premium">
-          <p className="text-muted-foreground">No dishes found matching your criteria.</p>
+          <p className="text-muted-foreground mb-4">No dishes found. {menuItems.length === 0 ? 'Start by adding your first dish!' : 'Try different filters.'}</p>
+          {menuItems.length === 0 && (
+            <Button
+              className="bg-gold hover:bg-gold-light"
+              onClick={() => setIsAddDialogOpen(true)}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Your First Dish
+            </Button>
+          )}
         </div>
       )}
     </DashboardLayout>
