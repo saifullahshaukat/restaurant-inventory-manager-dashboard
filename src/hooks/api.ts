@@ -199,6 +199,17 @@ export const useOrders = () => {
   });
 };
 
+export const useOrderItems = () => {
+  return useQuery({
+    queryKey: ['orderItems'],
+    queryFn: async () => {
+      const response = await fetch('/api/order-items');
+      const data = await response.json();
+      return data.data;
+    },
+  });
+};
+
 export const useCreateOrder = () => {
   const queryClient = useQueryClient();
   return useMutation<any, Error, any>({

@@ -649,6 +649,25 @@ app.get('/api/orders', async (req, res) => {
   }
 });
 
+// GET order items (for dashboard analytics)
+app.get('/api/order-items', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        oi.id, oi.order_id, oi.menu_item_id, oi.item_name, 
+        oi.quantity, oi.unit_price, oi.total_price,
+        o.event_date, o.status
+      FROM order_items oi
+      LEFT JOIN orders o ON oi.order_id = o.id
+      ORDER BY o.event_date DESC
+    `);
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Error fetching order items:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // CREATE order
 app.post('/api/orders', async (req, res) => {
   const { 

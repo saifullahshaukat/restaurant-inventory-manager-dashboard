@@ -109,26 +109,35 @@ export function RevenueChart({ orders = [], purchases = [] }: RevenueChartProps)
 
 interface BestSellersChartProps {
   orders: Order[];
+  orderItems?: any[];
 }
 
-export function BestSellersChart({ orders = [] }: BestSellersChartProps) {
+export function BestSellersChart({ orders = [], orderItems = [] }: BestSellersChartProps) {
   // Calculate best selling dishes from order items
-  const dishSales = {} as Record<string, { orders: number; revenue: number }>;
+  const dishSales = {} as Record<string, { quantity: number; revenue: number }>;
   
-  orders.forEach(order => {
-    // For now, estimate based on total order value
-    // In a real scenario, you'd have order_items table
-    if (order.total_value) {
-      const estimatedDishName = `Event Order`;
-      dishSales[estimatedDishName] = (dishSales[estimatedDishName] || { orders: 0, revenue: 0 });
-      dishSales[estimatedDishName].orders += 1;
-      dishSales[estimatedDishName].revenue += order.total_value;
-    }
-  });
+  // If order items data is available, use it
+  if (orderItems && orderItems.length > 0) {
+    orderItems.forEach(item => {
+      const dishName = item.item_name || 'Unknown Dish';
+      if (!dishSales[dishName]) {
+        dishSales[dishName] = { quantity: 0, revenue: 0 };
+      }
+      // Convert to numbers in case they're strings from database
+      const quantity = typeof item.quantity === 'string' ? parseInt(item.quantity) : (item.quantity || 0);
+      const totalPrice = typeof item.total_price === 'string' ? parseFloat(item.total_price) : (item.total_price || 0);
+      
+      dishSales[dishName].quantity += quantity;
+      dishSales[dishName].revenue += totalPrice;
+    });
+  } else {
+    // Fallback: if no order items, don't show events
+    // Just show empty state until real data is available
+  }
 
   const topDishes = Object.entries(dishSales)
     .map(([name, data]) => ({ name, ...data }))
-    .sort((a, b) => b.revenue - a.revenue)
+    .sort((a, b) => b.quantity - a.quantity)
     .slice(0, 5);
 
   return (
@@ -148,12 +157,12 @@ export function BestSellersChart({ orders = [] }: BestSellersChartProps) {
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-medium text-sm text-foreground">{dish.name}</span>
-                  <span className="text-xs text-muted-foreground">{dish.orders} orders</span>
+                  <span className="text-xs text-muted-foreground">{dish.quantity} sold</span>
                 </div>
                 <div className="h-2 bg-secondary rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-gradient-to-r from-gold to-gold-light rounded-full transition-all duration-500"
-                    style={{ width: `${(dish.orders / (topDishes[0]?.orders || 1)) * 100}%` }}
+                    style={{ width: `${(dish.quantity / (topDishes[0]?.quantity || 1)) * 100}%` }}
                   />
                 </div>
               </div>
