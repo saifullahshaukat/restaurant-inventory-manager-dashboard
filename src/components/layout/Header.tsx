@@ -41,9 +41,9 @@ export function Header({ title, subtitle }: HeaderProps) {
       <div className="flex items-center justify-between px-8 py-4">
         <div>
           {/* Display Business Name if available */}
-          {profile?.business_name && (
+          {profile?.name && (
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">
-              {profile.business_name}
+              {profile.name}
             </p>
           )}
           <h1 className="font-display text-2xl font-semibold text-foreground">{title}</h1>
@@ -108,8 +108,10 @@ export function Header({ title, subtitle }: HeaderProps) {
               {profile ? (
                 <>
                   <div className="px-4 py-3 border-b border-border">
-                    <p className="font-semibold text-sm">{profile.business_name || profile.name}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{profile.email}</p>
+                    <p className="font-semibold text-sm">{profile.name}</p>
+                    {profile.email && (
+                      <p className="text-xs text-muted-foreground mt-1">{profile.email}</p>
+                    )}
                     {profile.city && (
                       <p className="text-xs text-muted-foreground">{profile.city}</p>
                     )}

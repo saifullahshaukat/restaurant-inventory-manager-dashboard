@@ -15,6 +15,10 @@ export default function SettingsPage() {
   const [formData, setFormData] = useState({
     name: '',
     tagline: '',
+    email: '',
+    phone: '',
+    address: '',
+    city: '',
   });
   const [notifications, setNotifications] = useState({
     lowStock: true,
@@ -34,6 +38,10 @@ export default function SettingsPage() {
         setFormData({
           name: response.data.data.name || '',
           tagline: response.data.data.tagline || '',
+          email: response.data.data.email || '',
+          phone: response.data.data.phone || '',
+          address: response.data.data.address || '',
+          city: response.data.data.city || '',
         });
       }
     } catch (error) {
@@ -55,6 +63,10 @@ export default function SettingsPage() {
       const response = await axios.put('/api/profile', {
         name: formData.name,
         tagline: formData.tagline,
+        email: formData.email,
+        phone: formData.phone,
+        address: formData.address,
+        city: formData.city,
       });
 
       if (response.data.success) {
@@ -95,7 +107,7 @@ export default function SettingsPage() {
 
           <div className="space-y-4">
             <div>
-              <Label htmlFor="businessName">Business Name</Label>
+              <Label htmlFor="businessName">Business Name *</Label>
               <Input 
                 id="businessName" 
                 placeholder="Enter your business name"
@@ -111,6 +123,49 @@ export default function SettingsPage() {
                 placeholder="Enter a tagline (e.g., 'Catering & Event Services')"
                 value={formData.tagline}
                 onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
+                className="mt-1.5" 
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input 
+                  id="email" 
+                  type="email"
+                  placeholder="business@example.com"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="mt-1.5" 
+                />
+              </div>
+              <div>
+                <Label htmlFor="phone">Phone</Label>
+                <Input 
+                  id="phone" 
+                  placeholder="03XX-XXXXXXX"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="mt-1.5" 
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="address">Address</Label>
+              <Input 
+                id="address" 
+                placeholder="Business address"
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                className="mt-1.5" 
+              />
+            </div>
+            <div>
+              <Label htmlFor="city">City</Label>
+              <Input 
+                id="city" 
+                placeholder="City"
+                value={formData.city}
+                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                 className="mt-1.5" 
               />
             </div>

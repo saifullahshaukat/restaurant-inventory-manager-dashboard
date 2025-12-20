@@ -605,7 +605,7 @@ app.get('/api/search', async (req, res) => {
 app.get('/api/profile', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT id, name, tagline FROM businesses LIMIT 1
+      SELECT id, name, tagline, email, phone, address, city FROM businesses LIMIT 1
     `);
 
     if (result.rows.length === 0) {
@@ -618,6 +618,10 @@ app.get('/api/profile', async (req, res) => {
         id: result.rows[0].id,
         name: result.rows[0].name,
         tagline: result.rows[0].tagline,
+        email: result.rows[0].email,
+        phone: result.rows[0].phone,
+        address: result.rows[0].address,
+        city: result.rows[0].city,
         role: 'Admin'
       }
     });
@@ -629,17 +633,21 @@ app.get('/api/profile', async (req, res) => {
 
 // UPDATE profile
 app.put('/api/profile', async (req, res) => {
-  const { name, tagline } = req.body;
+  const { name, tagline, email, phone, address, city } = req.body;
 
   try {
     const result = await pool.query(`
       UPDATE businesses 
       SET name = COALESCE($1, name), 
           tagline = COALESCE($2, tagline),
+          email = COALESCE($3, email),
+          phone = COALESCE($4, phone),
+          address = COALESCE($5, address),
+          city = COALESCE($6, city),
           updated_at = NOW()
       WHERE id = (SELECT id FROM businesses LIMIT 1)
-      RETURNING id, name, tagline
-    `, [name, tagline]);
+      RETURNING id, name, tagline, email, phone, address, city
+    `, [name, tagline, email, phone, address, city]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Business not found' });
