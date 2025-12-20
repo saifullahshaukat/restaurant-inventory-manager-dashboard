@@ -1,0 +1,179 @@
+@import '@fontsource/playfair-display/400.css';
+@import '@fontsource/playfair-display/500.css';
+@import '@fontsource/playfair-display/600.css';
+@import '@fontsource/playfair-display/700.css';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Premium Artisan Palette - Warm & Elegant */
+    --background: 40 33% 98%;
+    --foreground: 30 10% 15%;
+
+    --card: 40 30% 99%;
+    --card-foreground: 30 10% 15%;
+
+    --popover: 40 30% 99%;
+    --popover-foreground: 30 10% 15%;
+
+    /* Deep warm charcoal - primary actions */
+    --primary: 30 8% 20%;
+    --primary-foreground: 40 30% 97%;
+
+    /* Soft taupe - secondary surfaces */
+    --secondary: 35 15% 93%;
+    --secondary-foreground: 30 10% 25%;
+
+    /* Warm muted tones */
+    --muted: 35 12% 90%;
+    --muted-foreground: 30 8% 45%;
+
+    /* Champagne gold accent */
+    --accent: 38 45% 65%;
+    --accent-foreground: 30 10% 15%;
+
+    /* Rich gold for highlights */
+    --gold: 38 50% 55%;
+    --gold-light: 40 45% 75%;
+    --gold-muted: 38 30% 85%;
+
+    /* Status colors */
+    --success: 145 50% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 90% 55%;
+    --warning-foreground: 30 10% 15%;
+    --info: 200 60% 50%;
+    --info-foreground: 0 0% 100%;
+
+    --destructive: 0 65% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 35 20% 88%;
+    --input: 35 20% 88%;
+    --ring: 38 45% 65%;
+
+    --radius: 0.5rem;
+
+    /* Sidebar - subtle cream */
+    --sidebar-background: 38 25% 96%;
+    --sidebar-foreground: 30 10% 25%;
+    --sidebar-primary: 38 45% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 38 30% 90%;
+    --sidebar-accent-foreground: 30 10% 20%;
+    --sidebar-border: 35 20% 90%;
+    --sidebar-ring: 38 45% 65%;
+
+    /* Typography */
+    --font-display: 'Playfair Display', Georgia, serif;
+    --font-body: 'Inter', system-ui, sans-serif;
+
+    /* Shadows */
+    --shadow-soft: 0 2px 8px -2px hsl(30 10% 20% / 0.08);
+    --shadow-card: 0 4px 16px -4px hsl(30 10% 20% / 0.1);
+    --shadow-elevated: 0 8px 30px -8px hsl(30 10% 20% / 0.15);
+  }
+
+  .dark {
+    --background: 30 10% 8%;
+    --foreground: 40 20% 95%;
+
+    --card: 30 10% 10%;
+    --card-foreground: 40 20% 95%;
+
+    --popover: 30 10% 10%;
+    --popover-foreground: 40 20% 95%;
+
+    --primary: 38 45% 65%;
+    --primary-foreground: 30 10% 10%;
+
+    --secondary: 30 10% 15%;
+    --secondary-foreground: 40 20% 90%;
+
+    --muted: 30 10% 18%;
+    --muted-foreground: 35 15% 60%;
+
+    --accent: 38 50% 55%;
+    --accent-foreground: 30 10% 10%;
+
+    --gold: 38 55% 60%;
+    --gold-light: 40 50% 70%;
+    --gold-muted: 38 30% 25%;
+
+    --destructive: 0 60% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 30 10% 20%;
+    --input: 30 10% 20%;
+    --ring: 38 50% 55%;
+
+    --sidebar-background: 30 10% 6%;
+    --sidebar-foreground: 40 20% 90%;
+    --sidebar-primary: 38 50% 55%;
+    --sidebar-primary-foreground: 30 10% 10%;
+    --sidebar-accent: 30 10% 15%;
+    --sidebar-accent-foreground: 40 20% 90%;
+    --sidebar-border: 30 10% 18%;
+    --sidebar-ring: 38 50% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+  }
+}
+
+@layer components {
+  .text-gradient-gold {
+    @apply bg-gradient-to-r from-gold to-gold-light bg-clip-text text-transparent;
+  }
+
+  .card-premium {
+    @apply bg-card border border-border/50 rounded-lg shadow-soft;
+  }
+
+  .stat-card {
+    @apply bg-card border border-border/50 rounded-xl p-6 shadow-card transition-all duration-300 hover:shadow-elevated hover:border-gold/20;
+  }
+
+  .btn-gold {
+    @apply bg-gold text-primary-foreground hover:bg-gold-light transition-colors;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-body {
+    font-family: var(--font-body);
+  }
+
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+}
