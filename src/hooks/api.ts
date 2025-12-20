@@ -49,21 +49,21 @@ export const useCreateMenuItem = () => {
   });
 };
 
-export const useUpdateMenuItem = (id) => {
+export const useUpdateMenuItem = () => {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data) => menuAPI.update(id, data),
-    onSuccess: () => {
+  return useMutation<any, Error, { id: string; data: any }>({
+    mutationFn: ({ id, data }) => menuAPI.update(id, data),
+    onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['menuItems'] });
       queryClient.invalidateQueries({ queryKey: ['menuItem', id] });
     },
   });
 };
 
-export const useDeleteMenuItem = (id) => {
+export const useDeleteMenuItem = () => {
   const queryClient = useQueryClient();
-  return useMutation<any, Error, void>({
-    mutationFn: () => menuAPI.delete(id),
+  return useMutation<any, Error, string>({
+    mutationFn: (id: string) => menuAPI.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['menuItems'] });
     },
@@ -105,20 +105,20 @@ export const useCreateInventoryItem = () => {
   });
 };
 
-export const useUpdateInventoryItem = (id) => {
+export const useUpdateInventoryItem = () => {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data) => inventoryAPI.update(id, data),
+  return useMutation<any, Error, { id: string; data: any }>({
+    mutationFn: ({ id, data }) => inventoryAPI.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
     },
   });
 };
 
-export const useUpdateStock = (id) => {
+export const useUpdateStock = () => {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data) => inventoryAPI.updateStock(id, data),
+  return useMutation<any, Error, { id: string; data: any }>({
+    mutationFn: ({ id, data }) => inventoryAPI.updateStock(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['lowStockItems'] });
@@ -152,10 +152,10 @@ export const useCreatePurchase = () => {
   });
 };
 
-export const useUpdatePurchase = (id) => {
+export const useUpdatePurchase = () => {
   const queryClient = useQueryClient();
-  return useMutation<any, Error, any>({
-    mutationFn: (data) => purchaseAPI.update(id, data),
+  return useMutation<any, Error, { id: string; data: any }>({
+    mutationFn: ({ id, data }) => purchaseAPI.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
     },
@@ -186,10 +186,10 @@ export const useCreateOrder = () => {
   });
 };
 
-export const useUpdateOrder = (id) => {
+export const useUpdateOrder = () => {
   const queryClient = useQueryClient();
-  return useMutation<any, Error, any>({
-    mutationFn: (data) => orderAPI.update(id, data),
+  return useMutation<any, Error, { id: string; data: any }>({
+    mutationFn: ({ id, data }) => orderAPI.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
     },
