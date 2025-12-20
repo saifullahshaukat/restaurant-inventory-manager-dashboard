@@ -100,15 +100,23 @@ app.post('/api/menu-items', async (req, res) => {
   } = req.body;
 
   try {
+    // Get the business ID (for now, using the first/only business)
+    const businessResult = await pool.query('SELECT id FROM businesses LIMIT 1');
+    const businessId = businessResult.rows[0]?.id;
+
+    if (!businessId) {
+      return res.status(400).json({ success: false, error: 'No business found' });
+    }
+
     // Insert menu item
     const itemResult = await pool.query(`
       INSERT INTO menu_items 
-      (name, description, category, cost_per_serving, selling_price, 
+      (business_id, name, description, category, cost_per_serving, selling_price, 
        margin_percent, is_vegetarian, prep_time_minutes, image_url)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `, [
-      name, description, category, cost_per_serving, selling_price,
+      businessId, name, description, category, cost_per_serving, selling_price,
       ((selling_price - cost_per_serving) / selling_price * 100),
       is_vegetarian, prep_time_minutes, image_url
     ]);
@@ -243,14 +251,22 @@ app.post('/api/inventory', async (req, res) => {
   } = req.body;
 
   try {
+    // Get the business ID (for now, using the first/only business)
+    const businessResult = await pool.query('SELECT id FROM businesses LIMIT 1');
+    const businessId = businessResult.rows[0]?.id;
+
+    if (!businessId) {
+      return res.status(400).json({ success: false, error: 'No business found' });
+    }
+
     const result = await pool.query(`
       INSERT INTO inventory_items 
-      (name, category, unit, current_stock, cost_per_unit, 
+      (business_id, name, category, unit, current_stock, cost_per_unit, 
        supplier_id, supplier_name, minimum_stock, is_active)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
       RETURNING *
     `, [
-      name, category, unit, 0, cost_per_unit,
+      businessId, name, category, unit, 0, cost_per_unit,
       supplier_id, supplier_name, minimum_stock
     ]);
 
@@ -369,22 +385,35 @@ app.post('/api/purchases', async (req, res) => {
   const { supplier_id, supplier_name, purchase_date, items } = req.body;
 
   try {
-    // Calculate totals
-    const totalAmount = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+    // Get the business ID (for now, using the first/only business)
+    const businessResult = await pool.query('SELECT id FROM businesses LIMIT 1');
+    const businessId = businessResult.rows[0]?.id;
+
+    if (!businessId) {
+      return res.status(400).json({ success: false, error: 'No business found' });
+    }
+
+    // Safely calculate totals with default empty array
+    const itemsArray = items || [];
+    const totalAmount = itemsArray.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+
+    // Generate purchase order number
+    const purchaseNum = await pool.query(`SELECT COUNT(*) as count FROM purchases`);
+    const purchaseOrderNumber = `PO-${String(purchaseNum.rows[0].count + 1).padStart(4, '0')}`;
 
     // Create purchase order
     const purchaseResult = await pool.query(`
       INSERT INTO purchases 
-      (supplier_id, supplier_name, purchase_date, total_amount, final_amount, payment_status)
-      VALUES ($1, $2, $3, $4, $5, 'Pending')
+      (business_id, purchase_order_number, supplier_id, supplier_name, purchase_date, total_amount, final_amount, payment_status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'Pending')
       RETURNING *
-    `, [supplier_id, supplier_name, purchase_date, totalAmount, totalAmount]);
+    `, [businessId, purchaseOrderNumber, supplier_id, supplier_name, purchase_date, totalAmount, totalAmount]);
 
     const purchaseId = purchaseResult.rows[0].id;
 
     // Add items to purchase
-    if (items && items.length > 0) {
-      for (const item of items) {
+    if (itemsArray && itemsArray.length > 0) {
+      for (const item of itemsArray) {
         await pool.query(`
           INSERT INTO purchase_items 
           (purchase_id, inventory_item_id, ingredient_name, quantity, unit, unit_price, total_price)
@@ -473,6 +502,14 @@ app.post('/api/orders', async (req, res) => {
   } = req.body;
 
   try {
+    // Get the business ID (for now, using the first/only business)
+    const businessResult = await pool.query('SELECT id FROM businesses LIMIT 1');
+    const businessId = businessResult.rows[0]?.id;
+
+    if (!businessId) {
+      return res.status(400).json({ success: false, error: 'No business found' });
+    }
+
     const totalValue = guest_count * price_per_head;
 
     // Generate order number
@@ -482,12 +519,12 @@ app.post('/api/orders', async (req, res) => {
     // Create order
     const orderResult = await pool.query(`
       INSERT INTO orders 
-      (order_number, client_name, client_type, event_date, event_type, 
+      (business_id, order_number, client_name, client_type, event_date, event_type, 
        event_location, guest_count, price_per_head, total_value, remaining_balance, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'Inquiry')
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'Inquiry')
       RETURNING *
     `, [
-      orderNumber, client_name, client_type, event_date, event_type,
+      businessId, orderNumber, client_name, client_type, event_date, event_type,
       event_location, guest_count, price_per_head, totalValue, totalValue
     ]);
 
