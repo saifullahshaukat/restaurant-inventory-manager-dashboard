@@ -1,5 +1,121 @@
 # Restaurant Inventory Manager - Database Setup Guide
 
+## Quick Start: Local Database Setup (5 Minutes)
+
+### Step 1: Install PostgreSQL
+
+**Windows:**
+- Download: https://www.postgresql.org/download/windows/
+- Choose PostgreSQL 15 or 16
+- Run installer and remember the `postgres` password
+- Default port: `5432`
+
+**Or use package manager:**
+```powershell
+choco install postgresql
+# or
+winget install PostgreSQL.PostgreSQL
+```
+
+### Step 2: Verify Installation
+
+```powershell
+psql --version
+# Should show: psql (PostgreSQL) 15.x or 16.x
+```
+
+### Step 3: Create Database & User
+
+```powershell
+psql -U postgres
+```
+
+Then run these SQL commands:
+
+```sql
+CREATE DATABASE restaurant_inventory_manager;
+CREATE USER rim_user WITH PASSWORD 'your_secure_password_here';
+ALTER ROLE rim_user CREATEDB;
+GRANT ALL PRIVILEGES ON DATABASE restaurant_inventory_manager TO rim_user;
+\q
+```
+
+### Step 4: Run the Schema
+
+```powershell
+cd d:\Projects\kitchen-command-center-main
+psql -U rim_user -d restaurant_inventory_manager -f schema.sql
+```
+
+### Step 5: Verify Setup
+
+```powershell
+psql -U rim_user -d restaurant_inventory_manager
+
+# List tables
+\dt
+
+# Should show 15 tables (users, businesses, orders, etc.)
+
+# Check seed data
+SELECT COUNT(*) FROM businesses;  -- Should show 1
+
+\q
+```
+
+### Step 6: Create .env File
+
+Create `.env` in project root:
+
+```env
+DATABASE_URL=postgresql://rim_user:your_secure_password_here@localhost:5432/restaurant_inventory_manager
+NODE_ENV=development
+PORT=5000
+JWT_SECRET=your_super_secret_key_here
+CORS_ORIGIN=http://localhost:8080
+```
+
+### Step 7: Common Issues
+
+**Error: "psql: command not found"**
+- PostgreSQL not in PATH. Reinstall or add to PATH
+
+**Error: "role 'rim_user' does not exist"**
+```powershell
+psql -U postgres
+CREATE USER rim_user WITH PASSWORD 'password';
+GRANT ALL PRIVILEGES ON DATABASE restaurant_inventory_manager TO rim_user;
+\q
+```
+
+**PostgreSQL service not running**
+```powershell
+Start-Service postgresql-x64-15
+# Or use Services app: Win+R → services.msc
+```
+
+### Useful Commands
+
+```powershell
+# Backup
+pg_dump -U rim_user restaurant_inventory_manager > backup.sql
+
+# Restore
+psql -U rim_user restaurant_inventory_manager < backup.sql
+
+# Delete database (careful!)
+psql -U postgres -c "DROP DATABASE restaurant_inventory_manager;"
+```
+
+### GUI Tools (Optional)
+
+View data visually with:
+- **pgAdmin**: https://www.pgadmin.org/download/
+- **DBeaver**: https://dbeaver.io/download/
+- **VS Code Extension**: PostgreSQL by Chris Kolkman
+
+---
+
 ## Database Recommendation: PostgreSQL
 
 **Why PostgreSQL?**
