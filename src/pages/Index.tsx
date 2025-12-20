@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { OrderCard } from '@/components/dashboard/OrderCard';
@@ -14,41 +13,21 @@ import {
   AlertCircle,
   Loader2
 } from 'lucide-react';
-import axios from 'axios';
 import { Button } from '@/components/ui/button';
+import { useDashboardStats, useOrders, useLowStockItems } from '@/hooks/api';
 
 const Index = () => {
-  const [stats, setStats] = useState(null);
-  const [orders, setOrders] = useState([]);
-  const [lowStockItems, setLowStockItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // API hooks
+  const { data: stats, isLoading: statsLoading, isError: statsError } = useDashboardStats();
+  const { data: allOrders = [], isLoading: ordersLoading, isError: ordersError } = useOrders();
+  const { data: allLowStockItems = [], isLoading: stockLoading, isError: stockError } = useLowStockItems();
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const [statsRes, ordersRes, stockRes] = await Promise.all([
-        axios.get('/api/dashboard/stats'),
-        axios.get('/api/orders'),
-        axios.get('/api/inventory/low-stock'),
-      ]);
-
-      setStats(statsRes.data.data);
-      setOrders(ordersRes.data.data.slice(0, 5));
-      setLowStockItems(stockRes.data.data.slice(0, 5));
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      setError('Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loading = statsLoading || ordersLoading || stockLoading;
+  const error = statsError || ordersError || stockError;
+  
+  // Get first 5 items
+  const orders = allOrders.slice(0, 5);
+  const lowStockItems = allLowStockItems.slice(0, 5);
 
   if (loading) {
     return (
@@ -64,8 +43,8 @@ const Index = () => {
     return (
       <DashboardLayout title="Dashboard" subtitle="Welcome back">
         <div className="p-8 text-red-500 text-center card-premium">
-          {error}
-          <Button onClick={fetchDashboardData} className="mt-4">
+          Failed to load dashboard data
+          <Button onClick={() => window.location.reload()} className="mt-4">
             Try Again
           </Button>
         </div>
@@ -93,37 +72,37 @@ const Index = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
         <StatCard
           title="Pending Orders"
-          value={data.pending_orders}
+          value={data.pending_orders ?? 0}
           icon={ClipboardList}
           variant="gold"
         />
         <StatCard
           title="Upcoming Events"
-          value={data.upcoming_events}
+          value={data.upcoming_events ?? 0}
           icon={Calendar}
           trend={{ value: 12, isPositive: true }}
         />
         <StatCard
           title="Low Stock Items"
-          value={data.low_stock_count}
+          value={data.low_stock_count ?? 0}
           icon={Package}
-          variant={data.low_stock_count > 0 ? 'warning' : 'success'}
+          variant={(data.low_stock_count ?? 0) > 0 ? 'warning' : 'success'}
         />
         <StatCard
           title="Inventory Value"
-          value={`Rs ${(data.inventory_value / 1000).toFixed(0)}K`}
+          value={`Rs ${((data.inventory_value ?? 0) / 1000).toFixed(0)}K`}
           icon={TrendingUp}
         />
         <StatCard
           title="Monthly Revenue"
-          value={`Rs ${(data.monthly_revenue / 1000).toFixed(0)}K`}
+          value={`Rs ${((data.monthly_revenue ?? 0) / 1000).toFixed(0)}K`}
           icon={Banknote}
           variant="gold"
           trend={{ value: 8, isPositive: true }}
         />
         <StatCard
           title="Total Sales"
-          value={`Rs ${(data.total_sales / 1000000).toFixed(2)}M`}
+          value={`Rs ${((data.total_sales ?? 0) / 1000000).toFixed(2)}M`}
           icon={AlertCircle}
           variant="success"
         />

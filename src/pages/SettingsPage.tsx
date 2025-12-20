@@ -7,11 +7,9 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Building2, Bell, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import axios from 'axios';
+import { useProfile, useUpdateProfile } from '@/hooks/api';
 
 export default function SettingsPage() {
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     tagline: '',
@@ -26,31 +24,22 @@ export default function SettingsPage() {
     paymentReminders: false,
   });
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
+  // API hooks
+  const { data: profile, isLoading } = useProfile();
+  const { mutate: updateProfile, isPending: saving } = useUpdateProfile();
 
-  const fetchProfile = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get('/api/profile');
-      if (response.data.success) {
-        setFormData({
-          name: response.data.data.name || '',
-          tagline: response.data.data.tagline || '',
-          email: response.data.data.email || '',
-          phone: response.data.data.phone || '',
-          address: response.data.data.address || '',
-          city: response.data.data.city || '',
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching profile:', error);
-      toast.error('Failed to load business settings');
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (profile) {
+      setFormData({
+        name: profile.name || '',
+        tagline: profile.tagline || '',
+        email: profile.email || '',
+        phone: profile.phone || '',
+        address: profile.address || '',
+        city: profile.city || '',
+      });
     }
-  };
+  }, [profile]);
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
@@ -58,29 +47,28 @@ export default function SettingsPage() {
       return;
     }
 
-    try {
-      setSaving(true);
-      const response = await axios.put('/api/profile', {
+    updateProfile(
+      {
         name: formData.name,
         tagline: formData.tagline,
         email: formData.email,
         phone: formData.phone,
         address: formData.address,
         city: formData.city,
-      });
-
-      if (response.data.success) {
-        toast.success('Business settings updated successfully!');
+      },
+      {
+        onSuccess: () => {
+          toast.success('Business settings updated successfully!');
+        },
+        onError: (error: any) => {
+          console.error('Error updating profile:', error);
+          toast.error('Failed to update business settings');
+        },
       }
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      toast.error('Failed to update business settings');
-    } finally {
-      setSaving(false);
-    }
+    );
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <DashboardLayout title="Settings" subtitle="Manage your business preferences">
         <div className="flex items-center justify-center h-64">
@@ -222,7 +210,7 @@ export default function SettingsPage() {
 
         {/* Save */}
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={() => fetchProfile()}>Cancel</Button>
+          <Button variant="outline">Cancel</Button>
           <Button 
             className="bg-gold hover:bg-gold-light text-primary-foreground"
             onClick={handleSave}

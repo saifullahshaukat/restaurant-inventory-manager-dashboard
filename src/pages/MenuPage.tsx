@@ -316,19 +316,19 @@ export default function MenuPage() {
             <div className="grid grid-cols-3 gap-2 pt-3 border-t border-border">
               <div>
                 <p className="text-xs text-muted-foreground">Cost</p>
-                <p className="font-semibold text-foreground">Rs {item.cost_per_serving}</p>
+                <p className="font-semibold text-foreground">Rs {Number(item.cost_per_serving || 0).toFixed(2)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Price</p>
-                <p className="font-semibold text-gold">Rs {item.selling_price}</p>
+                <p className="font-semibold text-gold">Rs {Number(item.selling_price || 0).toFixed(2)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Margin</p>
                 <p className={cn(
                   "font-semibold",
-                  (item.margin_percent || 0) >= 50 ? "text-success" : "text-warning"
+                  (Number(item.margin_percent) || 0) >= 50 ? "text-success" : "text-warning"
                 )}>
-                  {item.margin_percent?.toFixed(0) || 0}%
+                  {Number(item.margin_percent || 0).toFixed(0)}%
                 </p>
               </div>
             </div>

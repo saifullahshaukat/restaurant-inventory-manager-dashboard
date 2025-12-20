@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -12,7 +12,7 @@ import {
   Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import axios from 'axios';
+import { useProfile } from '@/hooks/api';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -26,24 +26,10 @@ const navigation = [
 export function Sidebar() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
-  const [businessName, setBusinessName] = useState('');
-  const [tagline, setTagline] = useState('');
+  const { data: profile } = useProfile();
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
-
-  const fetchProfile = async () => {
-    try {
-      const response = await axios.get('/api/profile');
-      if (response.data.success) {
-        setBusinessName(response.data.data.name || '');
-        setTagline(response.data.data.tagline || '');
-      }
-    } catch (error) {
-      console.error('Error fetching profile:', error);
-    }
-  };
+  const businessName = profile?.name || 'Business';
+  const tagline = profile?.tagline || '';
 
   const getInitial = () => {
     return businessName.charAt(0).toUpperCase() || 'B';
@@ -63,11 +49,13 @@ export function Sidebar() {
             <span className="font-display text-primary-foreground text-lg font-bold">{getInitial()}</span>
           </div>
           {!collapsed && (
-            <div className="animate-fade-in">
-              <h1 className="font-display text-lg font-semibold text-foreground leading-tight">
-                {businessName || 'Business'}
+            <div className="animate-fade-in min-w-0">
+              <h1 className="font-display text-lg font-semibold text-foreground leading-tight truncate">
+                {businessName}
               </h1>
-              <p className="text-xs text-muted-foreground">{tagline}</p>
+              {tagline && (
+                <p className="text-xs text-muted-foreground truncate">{tagline}</p>
+              )}
             </div>
           )}
         </div>

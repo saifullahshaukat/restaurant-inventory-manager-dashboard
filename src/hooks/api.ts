@@ -228,6 +228,16 @@ export const useProfile = () => {
   });
 };
 
+export const useUpdateProfile = () => {
+  const queryClient = useQueryClient();
+  return useMutation<any, Error, any>({
+    mutationFn: (data) => userAPI.updateProfile(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+    },
+  });
+};
+
 // ============================================================================
 // DASHBOARD HOOKS
 // ============================================================================

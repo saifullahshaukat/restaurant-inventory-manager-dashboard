@@ -102,6 +102,9 @@ export const searchAPI = {
 export const userAPI = {
   // Get profile
   getProfile: () => api.get('/profile'),
+
+  // Update profile
+  updateProfile: (data) => api.put('/profile', data),
 };
 
 // ============================================================================
