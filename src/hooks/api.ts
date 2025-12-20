@@ -41,7 +41,7 @@ export const useMenuItem = (id) => {
 
 export const useCreateMenuItem = () => {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<any, Error, any>({
     mutationFn: (data) => menuAPI.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['menuItems'] });
@@ -62,7 +62,7 @@ export const useUpdateMenuItem = (id) => {
 
 export const useDeleteMenuItem = (id) => {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<any, Error, void>({
     mutationFn: () => menuAPI.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['menuItems'] });
@@ -96,7 +96,7 @@ export const useLowStockItems = () => {
 
 export const useCreateInventoryItem = () => {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<any, Error, any>({
     mutationFn: (data) => inventoryAPI.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -154,7 +154,7 @@ export const useCreatePurchase = () => {
 
 export const useUpdatePurchase = (id) => {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<any, Error, any>({
     mutationFn: (data) => purchaseAPI.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
@@ -178,7 +178,7 @@ export const useOrders = () => {
 
 export const useCreateOrder = () => {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<any, Error, any>({
     mutationFn: (data) => orderAPI.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
@@ -188,7 +188,7 @@ export const useCreateOrder = () => {
 
 export const useUpdateOrder = (id) => {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<any, Error, any>({
     mutationFn: (data) => orderAPI.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
