@@ -9,7 +9,7 @@ interface UpcomingEventsProps {
 export function UpcomingEvents({ orders }: UpcomingEventsProps) {
   const upcomingOrders = orders
     .filter(o => o.status !== 'Delivered' && o.status !== 'Closed')
-    .sort((a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime())
+    .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime())
     .slice(0, 4);
 
   return (
@@ -24,7 +24,7 @@ export function UpcomingEvents({ orders }: UpcomingEventsProps) {
 
       <div className="space-y-4">
         {upcomingOrders.map((order, index) => {
-          const eventDate = new Date(order.eventDate);
+          const eventDate = new Date(order.event_date);
           const today = new Date();
           const daysUntil = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
           const isUrgent = daysUntil <= 2;
@@ -40,8 +40,8 @@ export function UpcomingEvents({ orders }: UpcomingEventsProps) {
             >
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <p className="font-medium text-foreground text-sm">{order.clientName}</p>
-                  <p className="text-xs text-muted-foreground">{order.eventType}</p>
+                  <p className="font-medium text-foreground text-sm">{order.client_name}</p>
+                  <p className="text-xs text-muted-foreground">{order.event_type}</p>
                 </div>
                 <span className={cn(
                   "text-xs font-semibold px-2 py-0.5 rounded-full",
@@ -57,7 +57,7 @@ export function UpcomingEvents({ orders }: UpcomingEventsProps) {
                   <span>{eventDate.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' })}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span>{order.guestCount} guests</span>
+                  <span>{order.guest_count} guests</span>
                 </div>
               </div>
             </div>
