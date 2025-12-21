@@ -675,8 +675,6 @@ app.post('/api/orders', async (req, res) => {
     event_location, guest_count, price_per_head, items 
   } = req.body;
 
-  console.log('Creating order with items:', items);
-
   try {
     // Get the business ID (for now, using the first/only business)
     const businessResult = await pool.query('SELECT id FROM businesses LIMIT 1');
@@ -707,9 +705,7 @@ app.post('/api/orders', async (req, res) => {
 
     // Add items to order
     if (items && items.length > 0) {
-      console.log('Inserting items:', items.length);
       for (const item of items) {
-        console.log('Inserting item:', item);
         await pool.query(`
           INSERT INTO order_items 
           (order_id, menu_item_id, item_name, quantity, unit_price, total_price)
@@ -719,9 +715,6 @@ app.post('/api/orders', async (req, res) => {
           item.quantity, item.unit_price, item.quantity * item.unit_price
         ]);
       }
-      console.log('Items inserted successfully');
-    } else {
-      console.log('No items provided');
     }
 
     res.status(201).json({ 

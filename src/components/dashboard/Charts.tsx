@@ -116,28 +116,17 @@ export function BestSellersChart({ orders = [], orderItems = [] }: BestSellersCh
   // Calculate best selling dishes from order items
   const dishSales = {} as Record<string, { quantity: number; revenue: number }>;
   
-  // Debug log
-  console.log('BestSellersChart received orderItems:', orderItems, 'Length:', orderItems?.length);
-  
   // If order items data is available, use it
   if (orderItems && orderItems.length > 0) {
-    console.log('Processing order items...');
     orderItems.forEach(item => {
       const dishName = item.item_name || 'Unknown Dish';
       if (!dishSales[dishName]) {
         dishSales[dishName] = { quantity: 0, revenue: 0 };
       }
-      // Convert to numbers in case they're strings from database
-      const quantity = typeof item.quantity === 'string' ? parseInt(item.quantity) : (item.quantity || 0);
-      const totalPrice = typeof item.total_price === 'string' ? parseFloat(item.total_price) : (item.total_price || 0);
-      
-      console.log(`Item: ${dishName}, Qty: ${quantity}, Price: ${totalPrice}`);
-      dishSales[dishName].quantity += quantity;
-      dishSales[dishName].revenue += totalPrice;
+      dishSales[dishName].quantity += item.quantity || 0;
+      dishSales[dishName].revenue += item.total_price || 0;
     });
-    console.log('Final dishSales:', dishSales);
   } else {
-    console.log('No order items available');
     // Fallback: if no order items, don't show events
     // Just show empty state until real data is available
   }

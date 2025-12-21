@@ -203,15 +203,8 @@ export const useOrderItems = () => {
   return useQuery({
     queryKey: ['orderItems'],
     queryFn: async () => {
-      try {
-        const response = await orderAPI.getAllItems();
-        console.log('useOrderItems response:', response);
-        console.log('useOrderItems data:', response.data.data);
-        return response.data.data;
-      } catch (error) {
-        console.error('useOrderItems error:', error);
-        throw error;
-      }
+      const response = await orderAPI.getAllItems();
+      return response.data.data;
     },
   });
 };
@@ -219,10 +212,7 @@ export const useOrderItems = () => {
 export const useCreateOrder = () => {
   const queryClient = useQueryClient();
   return useMutation<any, Error, any>({
-    mutationFn: (data) => {
-      console.log('useCreateOrder sending data:', data);
-      return orderAPI.create(data);
-    },
+    mutationFn: (data) => orderAPI.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['orderItems'] });
