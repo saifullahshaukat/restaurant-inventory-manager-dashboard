@@ -14,9 +14,19 @@ import {
   Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useDashboardStats, useOrders, useLowStockItems, usePurchases, useOrderItems } from '@/hooks/api';
+import { useState } from 'react';
 
 const Index = () => {
+  const [selectedMonth, setSelectedMonth] = useState<string>('all');
+
   // API hooks
   const { data: stats, isLoading: statsLoading, isError: statsError } = useDashboardStats();
   const { data: allOrders = [], isLoading: ordersLoading, isError: ordersError } = useOrders();
@@ -54,6 +64,18 @@ const Index = () => {
     );
   }
 
+  // Filter data by selected month
+  const getFilteredData = () => {
+    // TODO: Implement proper month filtering after debugging date formats
+    return {
+      orders: allOrders,
+      purchases: allPurchases,
+      orderItems: allOrderItems,
+    };
+  };
+
+  const { orders: filteredOrders, purchases: filteredPurchases, orderItems: filteredOrderItems } = getFilteredData();
+
   const defaultStats = {
     pending_orders: 0,
     upcoming_events: 0,
@@ -64,12 +86,43 @@ const Index = () => {
   };
 
   const data = stats || defaultStats;
+  
+  // Calculate filtered stats
+  const filteredStats = {
+    pending_orders: filteredOrders.filter(o => o.status === 'pending').length,
+    total_revenue: filteredOrders.reduce((sum, o) => sum + parseFloat(o.total_amount || '0'), 0),
+    total_orders: filteredOrders.length,
+  };
 
   return (
     <DashboardLayout 
       title="Dashboard" 
       subtitle="Welcome back"
     >
+      {/* Month Selector */}
+      <div className="mb-6 flex items-center gap-4">
+        <label className="text-sm font-medium text-foreground">View by Month:</label>
+        <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="All Months" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Months</SelectItem>
+            {Array.from({ length: 12 }, (_, i) => {
+              const date = new Date();
+              date.setMonth(date.getMonth() - i);
+              const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+              const displayName = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+              return (
+                <SelectItem key={i} value={monthKey}>
+                  {displayName}
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
         <StatCard
@@ -113,10 +166,10 @@ const Index = () => {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <div className="lg:col-span-2">
-          <RevenueChart orders={allOrders} purchases={allPurchases} />
+          <RevenueChart orders={filteredOrders} purchases={filteredPurchases} />
         </div>
         <div>
-          <BestSellersChart orders={allOrders} orderItems={allOrderItems} />
+          <BestSellersChart orders={filteredOrders} orderItems={filteredOrderItems} />
         </div>
       </div>
 
@@ -131,8 +184,8 @@ const Index = () => {
             </a>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {orders.length > 0 ? (
-              orders.map((order) => (
+            {filteredOrders.slice(0, 5).length > 0 ? (
+              filteredOrders.slice(0, 5).map((order) => (
                 <OrderCard key={order.id} order={order} />
               ))
             ) : (
@@ -143,7 +196,7 @@ const Index = () => {
 
         {/* Sidebar Alerts */}
         <div className="space-y-6">
-          <UpcomingEvents orders={orders} />
+          <UpcomingEvents orders={filteredOrders} />
           <LowStockAlert items={lowStockItems} />
         </div>
       </div>
