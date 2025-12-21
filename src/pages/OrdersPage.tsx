@@ -169,7 +169,12 @@ export default function OrdersPage() {
           event_type: formData.event_type,
           guest_count: parseInt(formData.guest_count),
           price_per_head: parseFloat(formData.price_per_head),
-          status: 'Inquiry',
+          items: [{
+            menu_item_id: null,
+            item_name: `${formData.event_type} Event (${parseInt(formData.guest_count)} guests)`,
+            quantity: parseInt(formData.guest_count),
+            unit_price: parseFloat(formData.price_per_head),
+          }],
         });
         toast.success('Event order created successfully!');
         setIsNewOrderDialogOpen(false);
@@ -211,7 +216,12 @@ export default function OrdersPage() {
           event_type: 'Regular Order',
           guest_count: 1,
           price_per_head: total,
-          status: 'Inquiry',
+          items: selectedMenuItems.map(item => ({
+            menu_item_id: item.id,
+            item_name: item.name,
+            quantity: item.quantity,
+            unit_price: item.price,
+          })),
         });
         toast.success('Order created successfully!');
         setIsNewOrderDialogOpen(false);

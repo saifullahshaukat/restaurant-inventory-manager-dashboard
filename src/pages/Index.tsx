@@ -24,6 +24,9 @@ const Index = () => {
   const { data: allOrderItems = [], isLoading: itemsLoading, isError: itemsError } = useOrderItems();
   const { data: allLowStockItems = [], isLoading: stockLoading, isError: stockError } = useLowStockItems();
 
+  // Debug logging
+  console.log('Dashboard: allOrderItems:', allOrderItems, 'itemsLoading:', itemsLoading, 'itemsError:', itemsError);
+
   const loading = statsLoading || ordersLoading || purchasesLoading || itemsLoading || stockLoading;
   const error = statsError || ordersError || purchasesError || itemsError || stockError;
   

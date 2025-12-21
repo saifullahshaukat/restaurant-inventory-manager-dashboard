@@ -85,6 +85,9 @@ export const orderAPI = {
   // Get all orders
   getAll: () => api.get('/orders'),
 
+  // Get all order items
+  getAllItems: () => api.get('/order-items'),
+
   // Create order
   create: (data) => api.post('/orders', data),
 
