@@ -2,10 +2,10 @@
 
 [![GitHub Stars](https://img.shields.io/github/stars/saifullahshaukat/restaurant-inventory-manager-dashboard?style=flat-square&logo=github)](https://github.com/saifullahshaukat/restaurant-inventory-manager-dashboard)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](https://opensource.org/licenses/MIT)
-[![React](https://img.shields.io/badge/React-18+-blue?style=flat-square&logo=react)](https://react.dev)
+[![React](https://img.shields.io/badge/React-19-blue?style=flat-square&logo=react)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org)
-[![Vite](https://img.shields.io/badge/Vite-5-purple?style=flat-square&logo=vite)](https://vitejs.dev)
-[![Status](https://img.shields.io/badge/Status-Production%20Ready-green?style=flat-square)](#)
+[![Vite](https://img.shields.io/badge/Vite-7-purple?style=flat-square&logo=vite)](https://vitejs.dev)
+[![Status](https://img.shields.io/badge/Status-Active%20Development-blue?style=flat-square)](#)
 
 > **Stop Spreadsheets. Start Managing.**
 > 
@@ -17,7 +17,7 @@
 - **Real-time Updates** - Instant inventory & order tracking
 - **Open Source** - MIT licensed, community-driven
 - **Production Ready** - Deploy in minutes
-- **No Database Required** - Works with mock data, integrate your own API
+- **Flexible Data Layer** - Run frontend-only (mock data) or full-stack with PostgreSQL + backend API
 - **Built for Scale** - Handle 1000+ orders/month
 
 ---
@@ -39,7 +39,7 @@
 
 ---
 
-## Quick Start (60 Seconds)
+## Quick Start (Frontend Only)
 
 ```bash
 # Clone the repository
@@ -56,6 +56,62 @@ npm run dev
 ```
 
 Open **http://localhost:8080** in your browser. Dashboard is live immediately!
+
+---
+
+## Full-Stack Setup (PostgreSQL + Backend API + Auth)
+
+This repo includes an Express + PostgreSQL backend and JWT authentication.
+
+### 1) Set up PostgreSQL and load schema
+
+- Follow the database guide: [docs/DATABASE_SETUP.md](docs/DATABASE_SETUP.md)
+- Run the schema: `psql ... -f schema.sql`
+
+### 2) Configure environment variables
+
+Create a `.env` file in the repo root (see [docs/DATABASE_SETUP.md](docs/DATABASE_SETUP.md) for the full template). Minimum values:
+
+```env
+DATABASE_URL=postgresql://<user>:<password>@localhost:5432/<db>
+PORT=5000
+CORS_ORIGIN=http://localhost:8080
+JWT_SECRET=change_me_in_production
+```
+
+### 3) Run frontend + backend together
+
+```bash
+npm run dev:both
+```
+
+- Frontend: `http://localhost:8080`
+- Backend: `http://localhost:5000`
+
+Backend run modes are documented in [docs/BACKEND_SETUP.md](docs/BACKEND_SETUP.md).
+
+---
+
+## Authentication
+
+Auth endpoints (backend):
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+
+The backend issues a JWT (7-day expiry) and sets it as an HTTP-only cookie (`token`).
+
+### Test Users
+
+Seeded test users are documented here: [docs/TEST_USERS.md](docs/TEST_USERS.md)
+
+Notes:
+
+- All dashboard routes require login.
+- Settings is available to all authenticated users (not admin-only).
+- An `admin` role exists for future admin-only features.
 
 ### Try Different Package Managers
 
