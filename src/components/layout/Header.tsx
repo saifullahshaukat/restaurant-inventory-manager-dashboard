@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useProfile, useSearch } from '@/hooks/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 interface HeaderProps {
@@ -20,6 +21,7 @@ interface HeaderProps {
 
 export function Header({ title, subtitle }: HeaderProps) {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
 
@@ -27,9 +29,10 @@ export function Header({ title, subtitle }: HeaderProps) {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { data: searchResults = [] } = useSearch(searchQuery);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logout();
     toast.success('Logged out successfully');
-    // Implement actual logout logic here
+    navigate('/login');
   };
 
   const handleSettingsClick = () => {
@@ -105,16 +108,12 @@ export function Header({ title, subtitle }: HeaderProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              {profile ? (
+              {user ? (
                 <>
                   <div className="px-4 py-3 border-b border-border">
-                    <p className="font-semibold text-sm">{profile.name}</p>
-                    {profile.email && (
-                      <p className="text-xs text-muted-foreground mt-1">{profile.email}</p>
-                    )}
-                    {profile.city && (
-                      <p className="text-xs text-muted-foreground">{profile.city}</p>
-                    )}
+                    <p className="font-semibold text-sm">{user.first_name} {user.last_name}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{user.email}</p>
+                    <p className="text-xs text-gold font-medium mt-1 capitalize">{user.role}</p>
                   </div>
                   <DropdownMenuItem onClick={handleSettingsClick}>
                     <Settings className="w-4 h-4 mr-2" />
