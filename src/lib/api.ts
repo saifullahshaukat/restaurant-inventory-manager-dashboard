@@ -145,4 +145,19 @@ export const dashboardAPI = {
   getStats: () => api.get('/dashboard/stats'),
 };
 
+// ============================================================================
+// NOTIFICATIONS API
+// ============================================================================
+
+export const notificationsAPI = {
+  // Get all notifications
+  getAll: () => api.get('/notifications'),
+
+  // Mark notification as read
+  markAsRead: (id) => api.put(`/notifications/${id}/read`),
+
+  // Mark all notifications as read
+  markAllAsRead: () => api.put('/notifications/read-all'),
+};
+
 export default api;
