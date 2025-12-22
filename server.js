@@ -14,9 +14,12 @@ import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import Stripe from 'stripe';
 
 // Load environment variables
 dotenv.config();
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 const PORT = process.env.PORT;
@@ -1394,6 +1397,357 @@ app.get('/health', (req, res) => {
 
 // ============================================================================
 // ERROR HANDLING
+// ============================================================================
+
+// ============================================================================
+// STRIPE PAYMENT ENDPOINTS
+// ============================================================================
+
+// Create payment intent for order
+app.post('/api/payments/create-intent', authenticateToken, async (req, res) => {
+  const { orderId, amount, currency = 'usd', description } = req.body;
+
+  try {
+    // Create or get Stripe customer
+    let stripeCustomerId;
+    const userResult = await pool.query(
+      'SELECT stripe_customer_id FROM users WHERE id = $1',
+      [req.user.id]
+    );
+
+    if (userResult.rows[0]?.stripe_customer_id) {
+      stripeCustomerId = userResult.rows[0].stripe_customer_id;
+    } else {
+      const customer = await stripe.customers.create({
+        email: req.user.email,
+        metadata: { userId: req.user.id }
+      });
+      stripeCustomerId = customer.id;
+      
+      await pool.query(
+        'UPDATE users SET stripe_customer_id = $1 WHERE id = $2',
+        [stripeCustomerId, req.user.id]
+      );
+    }
+
+    // Create payment intent
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100), // Convert to cents
+      currency,
+      customer: stripeCustomerId,
+      description: description || `Payment for Order ${orderId}`,
+      metadata: { orderId, userId: req.user.id }
+    });
+
+    // Save payment record
+    await pool.query(`
+      INSERT INTO payments (
+        order_id, user_id, stripe_payment_intent_id, stripe_customer_id,
+        amount, currency, status, description
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, [orderId, req.user.id, paymentIntent.id, stripeCustomerId, amount, currency, 'pending', description]);
+
+    res.json({
+      success: true,
+      data: {
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id
+      }
+    });
+  } catch (error) {
+    console.error('Error creating payment intent:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Confirm payment
+app.post('/api/payments/confirm', authenticateToken, async (req, res) => {
+  const { paymentIntentId } = req.body;
+
+  try {
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    await pool.query(
+      'UPDATE payments SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE stripe_payment_intent_id = $2',
+      [paymentIntent.status, paymentIntentId]
+    );
+
+    // If payment succeeded, update order
+    if (paymentIntent.status === 'succeeded') {
+      const payment = await pool.query(
+        'SELECT order_id, amount FROM payments WHERE stripe_payment_intent_id = $1',
+        [paymentIntentId]
+      );
+
+      if (payment.rows[0]?.order_id) {
+        await pool.query(
+          'UPDATE orders SET payment_received = payment_received + $1, balance = total_price - (payment_received + $2) WHERE id = $3',
+          [payment.rows[0].amount, payment.rows[0].amount, payment.rows[0].order_id]
+        );
+      }
+    }
+
+    res.json({ success: true, data: paymentIntent });
+  } catch (error) {
+    console.error('Error confirming payment:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get payment history
+app.get('/api/payments', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT p.*, o.event_type, o.client_name, o.event_date
+      FROM payments p
+      LEFT JOIN orders o ON p.order_id = o.id
+      WHERE p.user_id = $1
+      ORDER BY p.created_at DESC
+    `, [req.user.id]);
+
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Error fetching payments:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create refund
+app.post('/api/payments/refund', authenticateToken, async (req, res) => {
+  const { paymentId, amount, reason } = req.body;
+
+  try {
+    const paymentResult = await pool.query(
+      'SELECT stripe_payment_intent_id, amount as total_amount FROM payments WHERE id = $1',
+      [paymentId]
+    );
+
+    if (paymentResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Payment not found' });
+    }
+
+    const refund = await stripe.refunds.create({
+      payment_intent: paymentResult.rows[0].stripe_payment_intent_id,
+      amount: amount ? Math.round(amount * 100) : undefined,
+      reason: reason || 'requested_by_customer'
+    });
+
+    await pool.query(`
+      INSERT INTO refunds (payment_id, stripe_refund_id, amount, reason, status, created_by)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [paymentId, refund.id, amount || paymentResult.rows[0].total_amount, reason, refund.status, req.user.id]);
+
+    res.json({ success: true, data: refund });
+  } catch (error) {
+    console.error('Error creating refund:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Save payment method
+app.post('/api/payment-methods/save', authenticateToken, async (req, res) => {
+  const { paymentMethodId } = req.body;
+
+  try {
+    const userResult = await pool.query(
+      'SELECT stripe_customer_id FROM users WHERE id = $1',
+      [req.user.id]
+    );
+
+    const stripeCustomerId = userResult.rows[0]?.stripe_customer_id;
+    if (!stripeCustomerId) {
+      return res.status(400).json({ success: false, error: 'No Stripe customer found' });
+    }
+
+    const paymentMethod = await stripe.paymentMethods.attach(paymentMethodId, {
+      customer: stripeCustomerId
+    });
+
+    await stripe.customers.update(stripeCustomerId, {
+      invoice_settings: { default_payment_method: paymentMethodId }
+    });
+
+    await pool.query(`
+      INSERT INTO payment_methods (
+        user_id, stripe_payment_method_id, stripe_customer_id, type,
+        card_brand, card_last4, card_exp_month, card_exp_year, is_default
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
+      ON CONFLICT (stripe_payment_method_id) DO UPDATE SET is_default = true
+    `, [
+      req.user.id,
+      paymentMethod.id,
+      stripeCustomerId,
+      paymentMethod.type,
+      paymentMethod.card?.brand,
+      paymentMethod.card?.last4,
+      paymentMethod.card?.exp_month,
+      paymentMethod.card?.exp_year
+    ]);
+
+    res.json({ success: true, data: paymentMethod });
+  } catch (error) {
+    console.error('Error saving payment method:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get saved payment methods
+app.get('/api/payment-methods', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM payment_methods WHERE user_id = $1 ORDER BY is_default DESC, created_at DESC',
+      [req.user.id]
+    );
+
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Error fetching payment methods:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Set default payment method
+app.post('/api/payment-methods/:id/set-default', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // First, unset all default payment methods for this user
+    await pool.query(
+      'UPDATE payment_methods SET is_default = false WHERE user_id = $1',
+      [req.user.id]
+    );
+
+    // Then set the selected one as default
+    const result = await pool.query(
+      'UPDATE payment_methods SET is_default = true WHERE id = $1 AND user_id = $2 RETURNING *',
+      [id, req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Payment method not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error setting default payment method:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete payment method
+app.delete('/api/payment-methods/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const methodResult = await pool.query(
+      'SELECT stripe_payment_method_id FROM payment_methods WHERE id = $1 AND user_id = $2',
+      [id, req.user.id]
+    );
+
+    if (methodResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Payment method not found' });
+    }
+
+    // Detach from Stripe
+    try {
+      await stripe.paymentMethods.detach(methodResult.rows[0].stripe_payment_method_id);
+    } catch (stripeError) {
+      console.error('Stripe detach error:', stripeError);
+      // Continue even if Stripe fails - remove from our database
+    }
+
+    // Delete from database
+    await pool.query(
+      'DELETE FROM payment_methods WHERE id = $1 AND user_id = $2',
+      [id, req.user.id]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting payment method:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create subscription
+app.post('/api/subscriptions/create', authenticateToken, async (req, res) => {
+  const { planName, planPrice, billingInterval = 'month' } = req.body;
+
+  try {
+    const userResult = await pool.query(
+      'SELECT stripe_customer_id FROM users WHERE id = $1',
+      [req.user.id]
+    );
+
+    let stripeCustomerId = userResult.rows[0]?.stripe_customer_id;
+
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({
+        email: req.user.email,
+        metadata: { userId: req.user.id }
+      });
+      stripeCustomerId = customer.id;
+
+      await pool.query(
+        'UPDATE users SET stripe_customer_id = $1 WHERE id = $2',
+        [stripeCustomerId, req.user.id]
+      );
+    }
+
+    // Create price
+    const price = await stripe.prices.create({
+      unit_amount: Math.round(planPrice * 100),
+      currency: 'usd',
+      recurring: { interval: billingInterval },
+      product_data: { name: planName }
+    });
+
+    // Create subscription
+    const subscription = await stripe.subscriptions.create({
+      customer: stripeCustomerId,
+      items: [{ price: price.id }],
+      payment_behavior: 'default_incomplete',
+      expand: ['latest_invoice.payment_intent']
+    });
+
+    await pool.query(`
+      INSERT INTO subscriptions (
+        user_id, stripe_subscription_id, stripe_customer_id, plan_name,
+        plan_price, billing_interval, status, current_period_start, current_period_end
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [
+      req.user.id,
+      subscription.id,
+      stripeCustomerId,
+      planName,
+      planPrice,
+      billingInterval,
+      subscription.status,
+      new Date(subscription.current_period_start * 1000),
+      new Date(subscription.current_period_end * 1000)
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        subscriptionId: subscription.id,
+        clientSecret: subscription.latest_invoice.payment_intent.client_secret
+      }
+    });
+  } catch (error) {
+    console.error('Error creating subscription:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get Stripe publishable key
+app.get('/api/payments/config', (req, res) => {
+  res.json({
+    success: true,
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY
+  });
+});
+
 // ============================================================================
 
 app.use((req, res) => {
