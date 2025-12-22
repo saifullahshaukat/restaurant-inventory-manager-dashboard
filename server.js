@@ -11,6 +11,9 @@ import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import cookieParser from 'cookie-parser';
+import session from 'express-session';
+import passport from 'passport';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 
 // Load environment variables
 dotenv.config();
@@ -19,13 +22,85 @@ const app = express();
 const PORT = process.env.PORT;
 const JWT_SECRET = process.env.JWT_SECRET;
 
-// Middleware
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:8080',
+// Middleware - CORS configuration
+const corsOptions = {
+  origin: true, // In development, allow all origins
   credentials: true,
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['set-cookie']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
+
+// Session middleware (required for Passport)
+app.use(session({
+  secret: JWT_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+  }
+}));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Passport serialization
+passport.serializeUser((user, done) => {
+  done(null, user.id);
+});
+
+passport.deserializeUser(async (id, done) => {
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+    done(null, result.rows[0]);
+  } catch (error) {
+    done(error, null);
+  }
+});
+
+// Google OAuth Strategy
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: process.env.GOOGLE_CALLBACK_URL
+  },
+  async (accessToken, refreshToken, profile, done) => {
+    try {
+      // Check if user exists
+      const existingUser = await pool.query(
+        'SELECT * FROM users WHERE email = $1',
+        [profile.emails[0].value]
+      );
+
+      if (existingUser.rows.length > 0) {
+        // User exists, return user
+        return done(null, existingUser.rows[0]);
+      }
+
+      // Create new user
+      const newUser = await pool.query(`
+        INSERT INTO users (email, first_name, last_name, role, is_active, oauth_provider, oauth_id)
+        VALUES ($1, $2, $3, 'user', true, 'google', $4)
+        RETURNING *
+      `, [
+        profile.emails[0].value,
+        profile.name.givenName,
+        profile.name.familyName,
+        profile.id
+      ]);
+
+      done(null, newUser.rows[0]);
+    } catch (error) {
+      done(error, null);
+    }
+  }
+));
 
 // Database connection
 const pool = new Pool({
@@ -208,6 +283,44 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+// Google OAuth routes
+app.get('/api/auth/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+app.get('/api/auth/google/callback',
+  passport.authenticate('google', { failureRedirect: 'http://localhost:8080/login' }),
+  async (req, res) => {
+    try {
+      // Generate JWT token for the user
+      const token = jwt.sign(
+        { id: req.user.id, email: req.user.email, role: req.user.role },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
+      // Set cookie
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+
+      // Redirect to frontend with token in URL (so frontend can store it)
+      res.redirect(`http://localhost:8080/auth/callback?token=${token}&user=${encodeURIComponent(JSON.stringify({
+        id: req.user.id,
+        email: req.user.email,
+        first_name: req.user.first_name,
+        last_name: req.user.last_name,
+        role: req.user.role
+      }))}`);
+    } catch (error) {
+      console.error('OAuth callback error:', error);
+      res.redirect('http://localhost:8080/login?error=oauth_failed');
+    }
+  }
+);
 
 // ============================================================================
 // MENU ITEMS ENDPOINTS

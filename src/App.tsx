@@ -14,6 +14,7 @@ import ProfitPage from "./pages/ProfitPage";
 import SettingsPage from "./pages/SettingsPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
+import OAuthCallbackPage from "./pages/OAuthCallbackPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,6 +30,7 @@ const App = () => (
             {/* Public Routes */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
+            <Route path="/auth/callback" element={<OAuthCallbackPage />} />
             
             {/* Protected Routes - Require Authentication */}
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
