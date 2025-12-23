@@ -28,17 +28,19 @@ export default function SettingsPage() {
   const { data: profile, isLoading } = useProfile();
   const { mutate: updateProfile, isPending: saving } = useUpdateProfile();
 
+  // Sync form data with profile data when it loads
   useEffect(() => {
     if (profile) {
-      setFormData({
-        name: profile.name || '',
-        tagline: profile.tagline || '',
-        email: profile.email || '',
-        phone: profile.phone || '',
-        address: profile.address || '',
-        city: profile.city || '',
-      });
+      setFormData(prev => ({
+        name: profile.name || prev.name,
+        tagline: profile.tagline || prev.tagline,
+        email: profile.email || prev.email,
+        phone: profile.phone || prev.phone,
+        address: profile.address || prev.address,
+        city: profile.city || prev.city,
+      }));
     }
+
   }, [profile]);
 
   const handleSave = async () => {
