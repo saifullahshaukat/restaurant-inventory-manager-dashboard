@@ -96,65 +96,65 @@ export default function SettingsPage() {
           <div className="space-y-4">
             <div>
               <Label htmlFor="businessName">Business Name *</Label>
-              <Input 
-                id="businessName" 
+              <Input
+                id="businessName"
                 placeholder="Enter your business name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="mt-1.5" 
+                className="mt-1.5"
               />
             </div>
             <div>
               <Label htmlFor="tagline">Tagline</Label>
-              <Input 
-                id="tagline" 
+              <Input
+                id="tagline"
                 placeholder="Enter a tagline (e.g., 'Catering & Event Services')"
                 value={formData.tagline}
                 onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
-                className="mt-1.5" 
+                className="mt-1.5"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="email">Email</Label>
-                <Input 
-                  id="email" 
+                <Input
+                  id="email"
                   type="email"
                   placeholder="business@example.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="mt-1.5" 
+                  className="mt-1.5"
                 />
               </div>
               <div>
                 <Label htmlFor="phone">Phone</Label>
-                <Input 
-                  id="phone" 
+                <Input
+                  id="phone"
                   placeholder="03XX-XXXXXXX"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="mt-1.5" 
+                  className="mt-1.5"
                 />
               </div>
             </div>
             <div>
               <Label htmlFor="address">Address</Label>
-              <Input 
-                id="address" 
+              <Input
+                id="address"
                 placeholder="Business address"
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                className="mt-1.5" 
+                className="mt-1.5"
               />
             </div>
             <div>
               <Label htmlFor="city">City</Label>
-              <Input 
-                id="city" 
+              <Input
+                id="city"
                 placeholder="City"
                 value={formData.city}
                 onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                className="mt-1.5" 
+                className="mt-1.5"
               />
             </div>
           </div>
@@ -178,7 +178,7 @@ export default function SettingsPage() {
                 <p className="font-medium text-foreground">Low Stock Alerts</p>
                 <p className="text-sm text-muted-foreground">Get notified when stock falls below minimum</p>
               </div>
-              <Switch 
+              <Switch
                 checked={notifications.lowStock}
                 onCheckedChange={(checked) => setNotifications({ ...notifications, lowStock: checked })}
               />
@@ -189,7 +189,7 @@ export default function SettingsPage() {
                 <p className="font-medium text-foreground">New Order Notifications</p>
                 <p className="text-sm text-muted-foreground">Alert when a new inquiry is received</p>
               </div>
-              <Switch 
+              <Switch
                 checked={notifications.newOrders}
                 onCheckedChange={(checked) => setNotifications({ ...notifications, newOrders: checked })}
               />
@@ -200,7 +200,7 @@ export default function SettingsPage() {
                 <p className="font-medium text-foreground">Payment Reminders</p>
                 <p className="text-sm text-muted-foreground">Remind clients about pending payments</p>
               </div>
-              <Switch 
+              <Switch
                 checked={notifications.paymentReminders}
                 onCheckedChange={(checked) => setNotifications({ ...notifications, paymentReminders: checked })}
               />
@@ -211,7 +211,7 @@ export default function SettingsPage() {
         {/* Save */}
         <div className="flex justify-end gap-3">
           <Button variant="outline">Cancel</Button>
-          <Button 
+          <Button
             className="bg-gold hover:bg-gold-light text-primary-foreground"
             onClick={handleSave}
             disabled={saving}
