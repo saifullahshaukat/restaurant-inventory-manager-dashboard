@@ -14,7 +14,6 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  loading: boolean;
   login: (user: User) => void;
   logout: () => void;
   isAdmin: () => boolean;
@@ -28,7 +27,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const storedUser = localStorage.getItem('user');
     return storedUser ? JSON.parse(storedUser) : null;
   });
-  const [loading, setLoading] = useState(false);
 
   const login = (userData: User) => {
     setUser(userData);
@@ -63,7 +61,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         user,
-        loading,
         login,
         logout,
         isAdmin,

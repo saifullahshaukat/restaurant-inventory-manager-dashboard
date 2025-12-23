@@ -10,7 +10,7 @@ import config from '@/config';
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const { login, isAuthenticated, loading } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -18,7 +18,7 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  if (!loading && isAuthenticated()) {
+  if (isAuthenticated()) {
     return <Navigate to="/" replace />;
   }
 

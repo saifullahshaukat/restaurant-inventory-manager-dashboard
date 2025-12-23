@@ -10,7 +10,7 @@ import config from '@/config';
 
 const SignupPage = () => {
   const navigate = useNavigate();
-  const { login, isAuthenticated, loading } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -22,7 +22,7 @@ const SignupPage = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  if (!loading && isAuthenticated()) {
+  if (isAuthenticated()) {
     return <Navigate to="/" replace />;
   }
 
