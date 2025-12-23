@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState } from 'react';
+import config from '@/config';
 
 interface User {
   id: string;
@@ -13,9 +14,8 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
   loading: boolean;
-  login: (user: User, token: string) => void;
+  login: (user: User) => void;
   logout: () => void;
   isAdmin: () => boolean;
   isAuthenticated: () => boolean;
@@ -28,21 +28,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const storedUser = localStorage.getItem('user');
     return storedUser ? JSON.parse(storedUser) : null;
   });
-  const [token, setToken] = useState<string | null>(() => {
-    return localStorage.getItem('token');
-  });
   const [loading, setLoading] = useState(false);
 
-  const login = (userData: User, authToken: string) => {
+  const login = (userData: User) => {
     setUser(userData);
-    setToken(authToken);
     localStorage.setItem('user', JSON.stringify(userData));
-    localStorage.setItem('token', authToken);
+    // Token is stored in HTTP-only cookie by backend
   };
 
   const logout = async () => {
     try {
-      await fetch('http://localhost:5000/api/auth/logout', {
+      await fetch(`${config.apiUrl}/api/auth/logout`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -51,9 +47,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     setUser(null);
-    setToken(null);
     localStorage.removeItem('user');
-    localStorage.removeItem('token');
+    // Token is cleared by backend (HTTP-only cookie)
   };
 
   const isAdmin = () => {
@@ -61,14 +56,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const isAuthenticated = () => {
-    return !!user && !!token;
+    return !!user;
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        token,
         loading,
         login,
         logout,

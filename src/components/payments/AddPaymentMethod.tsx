@@ -1,3 +1,4 @@
+import config from '@/config';
 import { useState } from 'react';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { getStripe } from '@/lib/stripe';
@@ -36,7 +37,7 @@ const AddCardForm = ({ onSuccess }: { onSuccess?: () => void }) => {
 
       // Save payment method to backend
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/payment-methods/save', {
+      const response = await fetch('${config.apiUrl}/api/payment-methods/save', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

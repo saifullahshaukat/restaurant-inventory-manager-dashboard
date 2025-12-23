@@ -1,3 +1,4 @@
+import config from '@/config';
 import { useState, useEffect } from 'react';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { getStripe } from '@/lib/stripe';
@@ -100,7 +101,7 @@ const QuickPaymentForm = ({ onSuccess }: { onSuccess?: () => void }) => {
   const fetchSavedCards = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/payment-methods', {
+      const response = await fetch('${config.apiUrl}/api/payment-methods', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -137,7 +138,7 @@ const QuickPaymentForm = ({ onSuccess }: { onSuccess?: () => void }) => {
       const token = localStorage.getItem('token');
       
       // Create payment intent
-      const response = await fetch('http://localhost:5000/api/payments/create-intent', {
+      const response = await fetch('${config.apiUrl}/api/payments/create-intent', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

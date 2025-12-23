@@ -1,3 +1,4 @@
+import config from '@/config';
 import { useState, useEffect } from 'react';
 import { CreditCard, Star, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -41,7 +42,7 @@ export const SavedPaymentMethods: React.FC<SavedPaymentMethodsProps> = ({
   const fetchPaymentMethods = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/payment-methods', {
+      const response = await fetch('${config.apiUrl}/api/payment-methods', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -69,7 +70,7 @@ export const SavedPaymentMethods: React.FC<SavedPaymentMethodsProps> = ({
   const handleSetDefault = async (id: number) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/payment-methods/${id}/set-default`, {
+      const response = await fetch(`${config.apiUrl}/api/payment-methods/${id}/set-default`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -96,7 +97,7 @@ export const SavedPaymentMethods: React.FC<SavedPaymentMethodsProps> = ({
     setIsDeleting(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/payment-methods/${deleteId}`, {
+      const response = await fetch(`${config.apiUrl}/api/payment-methods/${deleteId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,

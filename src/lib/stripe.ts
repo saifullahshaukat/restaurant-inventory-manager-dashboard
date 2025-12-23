@@ -1,13 +1,12 @@
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe } from "@stripe/stripe-js";
+import config from "@/config";
 
 let stripePromise: Promise<any> | null = null;
 
 export const getStripe = async () => {
   if (!stripePromise) {
-    // Fetch publishable key from backend
-    const response = await fetch('http://localhost:5000/api/payments/config');
-    const { publishableKey } = await response.json();
-    stripePromise = loadStripe(publishableKey);
+    // Use publishable key from environment variable
+    stripePromise = loadStripe(config.stripePublishableKey);
   }
   return stripePromise;
 };
