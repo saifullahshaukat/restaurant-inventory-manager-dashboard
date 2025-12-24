@@ -9,7 +9,8 @@ import {
   Calculator,
   ChevronLeft,
   ChevronRight,
-  Settings
+  Settings,
+  CreditCard
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useProfile } from '@/hooks/api';
@@ -21,6 +22,7 @@ const navigation = [
   { name: 'Inventory', href: '/inventory', icon: Package },
   { name: 'Purchases', href: '/purchases', icon: ShoppingCart },
   { name: 'Profit Calculator', href: '/profit', icon: Calculator },
+  { name: 'Payments', href: '/payments', icon: CreditCard },
 ];
 
 export function Sidebar() {

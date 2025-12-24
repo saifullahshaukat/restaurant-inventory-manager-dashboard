@@ -493,6 +493,14 @@ EXECUTE FUNCTION update_purchase_final_amount();
 INSERT INTO businesses (id, name, tagline, email, phone, city, country) VALUES
 ('550e8400-e29b-41d4-a716-446655440000', 'Mommy''s Kitchen', 'Artisan Catering & Gourmet Home Dining', 'hello@mommyskitchen.pk', '0332-5172782', 'Karachi', 'Pakistan');
 
+-- Insert test users
+-- Passwords: admin123, manager123, user123, staff123
+INSERT INTO users (id, email, password_hash, first_name, last_name, phone, role, business_id, is_active) VALUES
+('150e8400-e29b-41d4-a716-446655440000', 'admin@restaurant.com', '$2a$10$EY/QzQ0MBtDkO8.6tJ0NKOl0wc5aNMoUQY5PdHUy0O14UDGJ3nGmS', 'Admin', 'User', '0300-1000000', 'admin', '550e8400-e29b-41d4-a716-446655440000', true),
+('250e8400-e29b-41d4-a716-446655440000', 'manager@restaurant.com', '$2a$10$IvRzr.bYSHIhtfpqzygq.egMkAMA0xY9IAF7J9CuQ9FJNkfwxxSX6', 'Manager', 'User', '0300-1000001', 'user', '550e8400-e29b-41d4-a716-446655440000', true),
+('350e8400-e29b-41d4-a716-446655440000', 'user@restaurant.com', '$2a$10$l34mIvYD5XSwPZfJKd2nDO8s3mryUHRA466pKnm.TuAMuKXUveO2K', 'John', 'Doe', '0300-1000002', 'user', '550e8400-e29b-41d4-a716-446655440000', true),
+('450e8400-e29b-41d4-a716-446655440000', 'staff@restaurant.com', '$2a$10$qEtp5ekZAkyU98t.5wrnvunvmV.QlSFaLHm2/hNOgHPqLS9TT9SKS', 'Jane', 'Smith', '0300-1000003', 'user', '550e8400-e29b-41d4-a716-446655440000', true);
+
 -- Insert roles for business
 INSERT INTO roles (id, business_id, name, description, is_system_role) VALUES
 ('560e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440000', 'Super Admin', 'Full system access and business configuration', true),

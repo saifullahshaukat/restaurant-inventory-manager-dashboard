@@ -1,0 +1,10 @@
+{
+    "recommendations": [
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss",
+        "dsznajder.es7-react-js-snippets",
+        "mikestead.dotenv",
+        "yoavbls.pretty-ts-errors",
+        "esbenp.prettier-vscode"
+    ]
+}

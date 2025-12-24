@@ -8,19 +8,117 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { Pool } from 'pg';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import cookieParser from 'cookie-parser';
+import session from 'express-session';
+import passport from 'passport';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import Stripe from 'stripe';
 
 // Load environment variables
 dotenv.config();
 
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
 const app = express();
 const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET;
+const SESSION_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET;
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:8080';
 
-// Middleware
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:8080',
+// Middleware - CORS configuration with allowlist
+const allowedOrigins = process.env.CORS_ORIGINS 
+  ? process.env.CORS_ORIGINS.split(',')
+  : ['http://localhost:8080', 'http://localhost:3000'];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['set-cookie']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
+app.use(cookieParser());
+
+// Session middleware (required for Passport)
+app.use(session({
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+  }
+}));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Passport serialization
+passport.serializeUser((user, done) => {
+  done(null, user.id);
+});
+
+passport.deserializeUser(async (id, done) => {
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+    done(null, result.rows[0]);
+  } catch (error) {
+    done(error, null);
+  }
+});
+
+// Google OAuth Strategy
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: process.env.GOOGLE_CALLBACK_URL
+  },
+  async (accessToken, refreshToken, profile, done) => {
+    try {
+      // Check if user exists
+      const existingUser = await pool.query(
+        'SELECT * FROM users WHERE email = $1',
+        [profile.emails[0].value]
+      );
+
+      if (existingUser.rows.length > 0) {
+        // User exists, return user
+        return done(null, existingUser.rows[0]);
+      }
+
+      // Create new user
+      const newUser = await pool.query(`
+        INSERT INTO users (email, first_name, last_name, role, is_active, oauth_provider, oauth_id)
+        VALUES ($1, $2, $3, 'user', true, 'google', $4)
+        RETURNING *
+      `, [
+        profile.emails[0].value,
+        profile.name.givenName,
+        profile.name.familyName,
+        profile.id
+      ]);
+
+      done(null, newUser.rows[0]);
+    } catch (error) {
+      done(error, null);
+    }
+  }
+));
 
 // Database connection
 const pool = new Pool({
@@ -35,6 +133,207 @@ pool.query('SELECT NOW()', (err, res) => {
     console.log('✅ Database connected:', res.rows[0].now);
   }
 });
+
+// ============================================================================
+// AUTHENTICATION MIDDLEWARE
+// ============================================================================
+
+// Middleware to verify JWT token
+const authenticateToken = (req, res, next) => {
+  const token = req.cookies.token || req.headers['authorization']?.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ success: false, error: 'Access denied. No token provided.' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    res.status(403).json({ success: false, error: 'Invalid or expired token.' });
+  }
+};
+
+// Middleware to check if user is admin
+const requireAdmin = (req, res, next) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Access denied. Admin privileges required.' });
+  }
+  next();
+};
+
+// ============================================================================
+// AUTHENTICATION ENDPOINTS
+// ============================================================================
+
+// Register new user
+app.post('/api/auth/register', async (req, res) => {
+  const { email, password, firstName, lastName, phone, role = 'user' } = req.body;
+
+  try {
+    // Check if user already exists
+    const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ success: false, error: 'User with this email already exists' });
+    }
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    // Create user
+    const result = await pool.query(`
+      INSERT INTO users (email, password_hash, first_name, last_name, phone, role, is_active)
+      VALUES ($1, $2, $3, $4, $5, $6, true)
+      RETURNING id, email, first_name, last_name, phone, role, created_at
+    `, [email, passwordHash, firstName, lastName, phone, role]);
+
+    const user = result.rows[0];
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    // Set cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
+    res.status(201).json({
+      success: true,
+      data: { user, token }
+    });
+  } catch (error) {
+    console.error('Error registering user:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Login user
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    // Find user
+    const result = await pool.query(`
+      SELECT id, email, password_hash, first_name, last_name, phone, role, is_active
+      FROM users
+      WHERE email = $1 AND deleted_at IS NULL
+    `, [email]);
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ success: false, error: 'Invalid email or password' });
+    }
+
+    const user = result.rows[0];
+
+    // Check if user is active
+    if (!user.is_active) {
+      return res.status(403).json({ success: false, error: 'Account is deactivated. Please contact administrator.' });
+    }
+
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    
+    if (!isValidPassword) {
+      return res.status(401).json({ success: false, error: 'Invalid email or password' });
+    }
+
+    // Update last login
+    await pool.query('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1', [user.id]);
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    // Set cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
+    // Remove password from response
+    delete user.password_hash;
+
+    res.json({
+      success: true,
+      data: { user, token }
+    });
+  } catch (error) {
+    console.error('Error logging in:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Logout user
+app.post('/api/auth/logout', (req, res) => {
+  res.clearCookie('token');
+  res.json({ success: true, message: 'Logged out successfully' });
+});
+
+// Get current user
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, email, first_name, last_name, phone, role, is_active, created_at, last_login
+      FROM users
+      WHERE id = $1 AND deleted_at IS NULL
+    `, [req.user.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Google OAuth routes
+app.get('/api/auth/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+app.get('/api/auth/google/callback',
+  passport.authenticate('google', { failureRedirect: `${FRONTEND_URL}/login` }),
+  async (req, res) => {
+    try {
+      // Generate JWT token for the user
+      const token = jwt.sign(
+        { id: req.user.id, email: req.user.email, role: req.user.role },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
+      // Set cookie
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
+
+      // Redirect to frontend (token is already in HTTP-only cookie)
+      // No sensitive data in URL
+      res.redirect(`${FRONTEND_URL}/auth/callback`);
+    } catch (error) {
+      console.error('OAuth callback error:', error);
+      res.redirect(`${FRONTEND_URL}/login?error=oauth_failed`);
+    }
+  }
+);
 
 // ============================================================================
 // MENU ITEMS ENDPOINTS
@@ -1108,6 +1407,415 @@ app.get('/health', (req, res) => {
 
 // ============================================================================
 // ERROR HANDLING
+// ============================================================================
+
+// ============================================================================
+// STRIPE PAYMENT ENDPOINTS
+// ============================================================================
+
+// Create payment intent for order
+app.post('/api/payments/create-intent', authenticateToken, async (req, res) => {
+  const { orderId, amount, currency = 'usd', description } = req.body;
+
+  try {
+    // Create or get Stripe customer
+    let stripeCustomerId;
+    const userResult = await pool.query(
+      'SELECT stripe_customer_id FROM users WHERE id = $1',
+      [req.user.id]
+    );
+
+    if (userResult.rows[0]?.stripe_customer_id) {
+      stripeCustomerId = userResult.rows[0].stripe_customer_id;
+    } else {
+      const customer = await stripe.customers.create({
+        email: req.user.email,
+        metadata: { userId: req.user.id }
+      });
+      stripeCustomerId = customer.id;
+      
+      await pool.query(
+        'UPDATE users SET stripe_customer_id = $1 WHERE id = $2',
+        [stripeCustomerId, req.user.id]
+      );
+    }
+
+    // Create payment intent
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100), // Convert to cents
+      currency,
+      customer: stripeCustomerId,
+      description: description || `Payment for Order ${orderId}`,
+      metadata: { orderId, userId: req.user.id }
+    });
+
+    // Save payment record
+    await pool.query(`
+      INSERT INTO payments (
+        order_id, user_id, stripe_payment_intent_id, stripe_customer_id,
+        amount, currency, status, description
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, [orderId, req.user.id, paymentIntent.id, stripeCustomerId, amount, currency, 'pending', description]);
+
+    res.json({
+      success: true,
+      data: {
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id
+      }
+    });
+  } catch (error) {
+    console.error('Error creating payment intent:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Confirm payment
+app.post('/api/payments/confirm', authenticateToken, async (req, res) => {
+  const { paymentIntentId } = req.body;
+
+  try {
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    await pool.query(
+      'UPDATE payments SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE stripe_payment_intent_id = $2',
+      [paymentIntent.status, paymentIntentId]
+    );
+
+    // If payment succeeded, update order
+    if (paymentIntent.status === 'succeeded') {
+      const payment = await pool.query(
+        'SELECT order_id, amount FROM payments WHERE stripe_payment_intent_id = $1',
+        [paymentIntentId]
+      );
+
+      if (payment.rows[0]?.order_id) {
+        await pool.query(
+          'UPDATE orders SET payment_received = payment_received + $1, balance = total_price - (payment_received + $2) WHERE id = $3',
+          [payment.rows[0].amount, payment.rows[0].amount, payment.rows[0].order_id]
+        );
+      }
+    }
+
+    res.json({ success: true, data: paymentIntent });
+  } catch (error) {
+    console.error('Error confirming payment:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get payment history
+app.get('/api/payments', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT p.*, o.event_type, o.client_name, o.event_date
+      FROM payments p
+      LEFT JOIN orders o ON p.order_id = o.id
+      WHERE p.user_id = $1
+      ORDER BY p.created_at DESC
+    `, [req.user.id]);
+
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Error fetching payments:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create refund
+app.post('/api/payments/refund', authenticateToken, async (req, res) => {
+  const { paymentId, amount, reason } = req.body;
+
+  try {
+    const paymentResult = await pool.query(
+      'SELECT stripe_payment_intent_id, amount as total_amount FROM payments WHERE id = $1',
+      [paymentId]
+    );
+
+    if (paymentResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Payment not found' });
+    }
+
+    const refund = await stripe.refunds.create({
+      payment_intent: paymentResult.rows[0].stripe_payment_intent_id,
+      amount: amount ? Math.round(amount * 100) : undefined,
+      reason: reason || 'requested_by_customer'
+    });
+
+    await pool.query(`
+      INSERT INTO refunds (payment_id, stripe_refund_id, amount, reason, status, created_by)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [paymentId, refund.id, amount || paymentResult.rows[0].total_amount, reason, refund.status, req.user.id]);
+
+    res.json({ success: true, data: refund });
+  } catch (error) {
+    console.error('Error creating refund:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Save payment method
+app.post('/api/payment-methods/save', authenticateToken, async (req, res) => {
+  const { paymentMethodId } = req.body;
+
+  try {
+    const userResult = await pool.query(
+      'SELECT stripe_customer_id FROM users WHERE id = $1',
+      [req.user.id]
+    );
+
+    const stripeCustomerId = userResult.rows[0]?.stripe_customer_id;
+    if (!stripeCustomerId) {
+      return res.status(400).json({ success: false, error: 'No Stripe customer found' });
+    }
+
+    const paymentMethod = await stripe.paymentMethods.attach(paymentMethodId, {
+      customer: stripeCustomerId
+    });
+
+    await stripe.customers.update(stripeCustomerId, {
+      invoice_settings: { default_payment_method: paymentMethodId }
+    });
+
+    await pool.query(`
+      INSERT INTO payment_methods (
+        user_id, stripe_payment_method_id, stripe_customer_id, type,
+        card_brand, card_last4, card_exp_month, card_exp_year, is_default
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
+      ON CONFLICT (stripe_payment_method_id) DO UPDATE SET is_default = true
+    `, [
+      req.user.id,
+      paymentMethod.id,
+      stripeCustomerId,
+      paymentMethod.type,
+      paymentMethod.card?.brand,
+      paymentMethod.card?.last4,
+      paymentMethod.card?.exp_month,
+      paymentMethod.card?.exp_year
+    ]);
+
+    res.json({ success: true, data: paymentMethod });
+  } catch (error) {
+    console.error('Error saving payment method:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get saved payment methods
+app.get('/api/payment-methods', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM payment_methods WHERE user_id = $1 ORDER BY is_default DESC, created_at DESC',
+      [req.user.id]
+    );
+
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Error fetching payment methods:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Set default payment method
+app.post('/api/payment-methods/:id/set-default', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // First, unset all default payment methods for this user
+    await pool.query(
+      'UPDATE payment_methods SET is_default = false WHERE user_id = $1',
+      [req.user.id]
+    );
+
+    // Then set the selected one as default
+    const result = await pool.query(
+      'UPDATE payment_methods SET is_default = true WHERE id = $1 AND user_id = $2 RETURNING *',
+      [id, req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Payment method not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error setting default payment method:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete payment method
+app.delete('/api/payment-methods/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const methodResult = await pool.query(
+      'SELECT stripe_payment_method_id FROM payment_methods WHERE id = $1 AND user_id = $2',
+      [id, req.user.id]
+    );
+
+    if (methodResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Payment method not found' });
+    }
+
+    // Detach from Stripe
+    try {
+      await stripe.paymentMethods.detach(methodResult.rows[0].stripe_payment_method_id);
+    } catch (stripeError) {
+      console.error('Stripe detach error:', stripeError);
+      // Continue even if Stripe fails - remove from our database
+    }
+
+    // Delete from database
+    await pool.query(
+      'DELETE FROM payment_methods WHERE id = $1 AND user_id = $2',
+      [id, req.user.id]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting payment method:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create subscription
+app.post('/api/subscriptions/create', authenticateToken, async (req, res) => {
+  const { planName, planPrice, billingInterval = 'month' } = req.body;
+
+  try {
+    const userResult = await pool.query(
+      'SELECT stripe_customer_id FROM users WHERE id = $1',
+      [req.user.id]
+    );
+
+    let stripeCustomerId = userResult.rows[0]?.stripe_customer_id;
+
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({
+        email: req.user.email,
+        metadata: { userId: req.user.id }
+      });
+      stripeCustomerId = customer.id;
+
+      await pool.query(
+        'UPDATE users SET stripe_customer_id = $1 WHERE id = $2',
+        [stripeCustomerId, req.user.id]
+      );
+    }
+
+    // Create price
+    const price = await stripe.prices.create({
+      unit_amount: Math.round(planPrice * 100),
+      currency: 'usd',
+      recurring: { interval: billingInterval },
+      product_data: { name: planName }
+    });
+
+    // Create subscription
+    const subscription = await stripe.subscriptions.create({
+      customer: stripeCustomerId,
+      items: [{ price: price.id }],
+      payment_behavior: 'default_incomplete',
+      expand: ['latest_invoice.payment_intent']
+    });
+
+    await pool.query(`
+      INSERT INTO subscriptions (
+        user_id, stripe_subscription_id, stripe_customer_id, plan_name,
+        plan_price, billing_interval, status, current_period_start, current_period_end
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [
+      req.user.id,
+      subscription.id,
+      stripeCustomerId,
+      planName,
+      planPrice,
+      billingInterval,
+      subscription.status,
+      new Date(subscription.current_period_start * 1000),
+      new Date(subscription.current_period_end * 1000)
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        subscriptionId: subscription.id,
+        clientSecret: subscription.latest_invoice.payment_intent.client_secret
+      }
+    });
+  } catch (error) {
+    console.error('Error creating subscription:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get Stripe publishable key
+app.get('/api/payments/config', (req, res) => {
+  res.json({
+    success: true,
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY
+  });
+});
+
+// ============================================================================
+// NOTIFICATIONS ENDPOINTS
+// ============================================================================
+
+// GET notifications for logged-in user
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT * FROM notifications 
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT 50
+    `, [req.user.id]);
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// MARK notification as read
+app.put('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      UPDATE notifications 
+      SET is_read = true, read_at = NOW()
+      WHERE id = $1 AND user_id = $2
+      RETURNING *
+    `, [req.params.id, req.user.id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Notification not found' });
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// MARK ALL notifications as read
+app.put('/api/notifications/read-all', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      UPDATE notifications 
+      SET is_read = true, read_at = NOW()
+      WHERE user_id = $1 AND is_read = false
+      RETURNING *
+    `, [req.user.id]);
+    
+    res.json({ success: true, message: 'All notifications marked as read', count: result.rowCount });
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ============================================================================
 
 app.use((req, res) => {
